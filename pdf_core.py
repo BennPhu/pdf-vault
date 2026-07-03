@@ -1,7 +1,6 @@
-"""Core PDF logic for PDF Vault: add/append, merge, split, and index management."""
+"""Core PDF logic for PDF Vault: config, add/append, merge, split, and index management."""
 
 import json
-import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -9,24 +8,94 @@ from pathlib import Path
 from pypdf import PdfReader, PdfWriter
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-LIBRARY_DIR = DATA_DIR / "library"
-MASTER_PDF = DATA_DIR / "master.pdf"
-INDEX_FILE = DATA_DIR / "index.json"
+DEFAULT_DATA_DIR = BASE_DIR / "data"
+CONFIG_FILE = Path.home() / ".pdf_vault_config.json"
+
+_config = None
 
 
 class PDFError(Exception):
     """Raised when a PDF operation fails."""
 
 
+# --------------------------------------------------------------------- config
+
+def load_config():
+    """Load config from disk (cached). Returns dict or empty dict if unset."""
+    global _config
+    if _config is None:
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    _config = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                _config = {}
+        else:
+            _config = {}
+    return _config
+
+
+def save_config(**updates):
+    """Update and persist the config."""
+    cfg = load_config()
+    cfg.update(updates)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+    return cfg
+
+
+def is_configured():
+    """True if the user has chosen a storage folder."""
+    return bool(load_config().get("storage_dir"))
+
+
+def set_storage_dir(path):
+    """Set the storage folder and create its structure."""
+    path = Path(path).expanduser().resolve()
+    save_config(storage_dir=str(path))
+    ensure_dirs()
+    return path
+
+
+def storage_dir():
+    """The user-chosen storage folder (falls back to the project data dir)."""
+    cfg = load_config()
+    return Path(cfg.get("storage_dir", DEFAULT_DATA_DIR))
+
+
+def library_dir():
+    return storage_dir() / "library"
+
+
+def master_pdf_path():
+    return storage_dir() / "master.pdf"
+
+
+def index_file_path():
+    return storage_dir() / "index.json"
+
+
+def last_output_dir():
+    """Last folder the user saved merge/split output to (or home)."""
+    path = load_config().get("last_output_dir")
+    if path and Path(path).is_dir():
+        return path
+    return str(Path.home())
+
+
+def set_last_output_dir(path):
+    save_config(last_output_dir=str(path))
+
+
 def ensure_dirs():
-    LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
+    library_dir().mkdir(parents=True, exist_ok=True)
 
 
 def load_index():
-    if INDEX_FILE.exists():
+    index_file = index_file_path()
+    if index_file.exists():
         try:
-            with open(INDEX_FILE, "r", encoding="utf-8") as f:
+            with open(index_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
             return []
@@ -35,7 +104,7 @@ def load_index():
 
 def save_index(index):
     ensure_dirs()
-    with open(INDEX_FILE, "w", encoding="utf-8") as f:
+    with open(index_file_path(), "w", encoding="utf-8") as f:
         json.dump(index, f, indent=2)
 
 
@@ -74,17 +143,18 @@ def _unique_dest(directory, filename):
 
 def _append_to_master(reader):
     """Append all pages of reader to master.pdf (created if missing)."""
+    master = master_pdf_path()
     writer = PdfWriter()
-    if MASTER_PDF.exists():
-        master_reader = PdfReader(str(MASTER_PDF))
+    if master.exists():
+        master_reader = PdfReader(str(master))
         for page in master_reader.pages:
             writer.add_page(page)
     for page in reader.pages:
         writer.add_page(page)
-    tmp = MASTER_PDF.with_suffix(".pdf.tmp")
+    tmp = master.with_suffix(".pdf.tmp")
     with open(tmp, "wb") as f:
         writer.write(f)
-    tmp.replace(MASTER_PDF)
+    tmp.replace(master)
 
 
 def add_pdf(source_path):
@@ -96,7 +166,7 @@ def add_pdf(source_path):
     source_path = Path(source_path)
     reader = _validate_pdf(source_path)
 
-    dest = _unique_dest(LIBRARY_DIR, source_path.name)
+    dest = _unique_dest(library_dir(), source_path.name)
     shutil.copy2(source_path, dest)
 
     try:
@@ -162,4 +232,9 @@ def split_pdf(source_path, output_dir, start=None, end=None):
 
 def library_path(filename):
     """Absolute path of a file stored in the library."""
-    return LIBRARY_DIR / filename
+    return library_dir() / filename
+
+
+def page_count(path):
+    """Number of pages in a PDF."""
+    return len(_validate_pdf(path).pages)
