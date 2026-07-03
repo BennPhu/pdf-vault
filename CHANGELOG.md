@@ -3,6 +3,25 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.1.0] - 2026-07-03
+
+Complete UI redesign: playful, modern web interface.
+
+### Added
+- New web-based UI (pywebview): white + terracotta design, rounded corners,
+  soft shadows, Nunito typography
+- Library shown as a thumbnail card grid (real page-1 previews)
+- Toast notifications replace popup dialogs; confetti on merge/split success
+- Mascot empty state and animated drop zone
+- In-app modals for first-run setup and both split flows (with live page preview)
+
+### Changed
+- Drag-and-drop now uses native HTML5 events (tkinterdnd2 workaround no longer needed)
+- Legacy tkinter UI preserved as `app_tk.py` for one release
+
+### Removed
+- tkinterdnd2 dependency from the packaged app
+
 ## [1.0.0] - 2026-07-03
 
 First release-ready version.

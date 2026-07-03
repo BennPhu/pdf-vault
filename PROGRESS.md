@@ -41,15 +41,19 @@ _Last updated: Jul 3, 2026_
 - [x] GitHub Actions: tests + pip-audit on push; tag push builds & publishes a Release
 - [x] Docs: CHANGELOG.md, RELEASING.md, SECURITY.md, user install instructions
 
+### Done — Phase 3: UI/UX (v1.1.0)
+- [x] Web-based UI via pywebview: white + terracotta (#E07A5F) playful design,
+      rounded corners, soft shadows, Nunito typography
+- [x] Thumbnail card grid library with real page-1 previews
+- [x] Toast notifications + confetti; mascot empty state; animated drop zone
+- [x] Native HTML5 drag-and-drop (tkinterdnd2 arm64 hack eliminated)
+- [x] App icon + `.app` bundle (done in v1.0.0, carried forward)
+
 ## Roadmap to the end goal
 
-### Phase 3 — UI/UX polish (beautiful)
-- [ ] Modern visual design: consistent spacing, typography, color palette, dark mode
-      (evaluate `customtkinter` or migrating to a web-based UI e.g. Tauri/Electron-style)
-- [ ] Thumbnail grid view of the library (not just a table)
-- [ ] Drag-to-reorder pages and PDFs before merging
-- [ ] Toast notifications instead of popup dialogs; smoother error handling
-- [ ] App icon + proper macOS `.app` bundle (py2app), dock/menu-bar presence
+### Phase 3.5 — remaining UI polish
+- [ ] Dark mode
+- [ ] Drag-to-reorder PDFs before merging
 
 ### Phase 4 — Functionality depth
 - [ ] Search & filter the library (by name, date, page count)
