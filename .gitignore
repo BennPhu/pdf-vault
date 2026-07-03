@@ -1,0 +1,12 @@
+# Virtual environment
+.venv/
+
+# App data (your PDFs stay local)
+data/
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
