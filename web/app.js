@@ -69,6 +69,7 @@ function renderLibrary() {
     grid.appendChild(card);
   }
   $("btn-unselect").hidden = selected.size === 0;
+  $("btn-select-all").hidden = library.length === 0 || selected.size === library.length;
 }
 
 function toggleSelect(filename) {
@@ -175,6 +176,12 @@ function handleAddResult(res) {
 /* -------------------------------------------------------------- actions */
 
 $("btn-unselect").addEventListener("click", unselectAll);
+$("btn-select-all").addEventListener("click", () => {
+  library.forEach((entry) => selected.add(entry.filename));
+  if (library.length && !previewFile) showPreview(library[0].filename, 1);
+  renderLibrary();
+  toast(`Selected all ${library.length} PDFs`, "success");
+});
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (!$("split-modal").hidden) closeSplitModal();
