@@ -12,6 +12,7 @@ rm -rf build dist
 $PYTHON -m PyInstaller \
   --windowed \
   --name "PDF Vault" \
+  --icon images/PDFVault.icns \
   --osx-bundle-identifier "com.bennphu.pdfvault" \
   --collect-all tkinterdnd2 \
   --noconfirm \
