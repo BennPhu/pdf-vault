@@ -25,8 +25,9 @@ _Last updated: Jul 3, 2026_
 - [x] Unselect button + Escape key
 
 ### Done — MVP 1 final
-- [x] Split dialog reworked: *Save Range as One PDF…* (e.g. pages 1-10 → one new file,
-      user picks save location) and *Split Each Page to Files…* (one-page files)
+- [x] Two dedicated split buttons, each with its own preview dialog:
+      *Split Selected* (pages x-y → one new PDF, user picks save location) and
+      *Individual Splits* (each page in range → its own one-page file)
 - [x] Master PDF is no longer created automatically — *Create Master PDF…* builds it
       on demand at a user-chosen location (no junk files in the storage folder)
 

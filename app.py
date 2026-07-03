@@ -89,14 +89,17 @@ class PreviewPanel(ttk.Frame):
         self.page_label.config(text=f"Page {self.page_index + 1} of {len(self.doc)}")
 
 
-class SplitDialog(tk.Toplevel):
-    """Split a PDF with a live page preview and from/to range fields."""
+class BaseSplitDialog(tk.Toplevel):
+    """Shared dialog: live page preview + from/to range fields + one action."""
+
+    dialog_title = "Split"
+    action_label = "OK"
 
     def __init__(self, parent, pdf_path, status_cb):
         super().__init__(parent)
         self.pdf_path = Path(pdf_path)
         self.status_cb = status_cb
-        self.title(f"Split \u2014 {self.pdf_path.name}")
+        self.title(f"{self.dialog_title} \u2014 {self.pdf_path.name}")
         self.geometry("460x560")
         self.transient(parent)
         self.grab_set()
@@ -104,7 +107,7 @@ class SplitDialog(tk.Toplevel):
         try:
             self.total_pages = pdf_core.page_count(self.pdf_path)
         except PDFError as e:
-            messagebox.showerror("Split", str(e), parent=parent)
+            messagebox.showerror(self.dialog_title, str(e), parent=parent)
             self.destroy()
             return
 
@@ -129,10 +132,8 @@ class SplitDialog(tk.Toplevel):
 
         btns = ttk.Frame(self)
         btns.pack(pady=(4, 10))
-        ttk.Button(btns, text="Save Range as One PDF\u2026",
-                   command=self.do_extract).pack(side="left", padx=6)
-        ttk.Button(btns, text="Split Each Page to Files\u2026",
-                   command=self.do_split_pages).pack(side="left", padx=6)
+        ttk.Button(btns, text=self.action_label,
+                   command=self.do_action).pack(side="left", padx=6)
         ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="left", padx=6)
 
     def _jump(self, var):
@@ -145,11 +146,20 @@ class SplitDialog(tk.Toplevel):
         try:
             return int(self.start_var.get()), int(self.end_var.get())
         except ValueError:
-            messagebox.showerror("Split", "Page numbers must be integers.", parent=self)
+            messagebox.showerror(self.dialog_title, "Page numbers must be integers.", parent=self)
             return None
 
-    def do_extract(self):
-        """Save the selected page range as one new PDF file."""
+    def do_action(self):
+        raise NotImplementedError
+
+
+class SplitRangeDialog(BaseSplitDialog):
+    """Split Selected: extract pages x-y into one new PDF file."""
+
+    dialog_title = "Split \u2014 pages x to y into one PDF"
+    action_label = "Save as One PDF\u2026"
+
+    def do_action(self):
         page_range = self._get_range()
         if page_range is None:
             return
@@ -172,8 +182,14 @@ class SplitDialog(tk.Toplevel):
         except PDFError as e:
             messagebox.showerror("Split failed", str(e), parent=self)
 
-    def do_split_pages(self):
-        """Split the selected page range into one file per page."""
+
+class IndividualSplitsDialog(BaseSplitDialog):
+    """Individual Splits: one file per page in the chosen range."""
+
+    dialog_title = "Individual Splits \u2014 one file per page"
+    action_label = "Split to Files\u2026"
+
+    def do_action(self):
         page_range = self._get_range()
         if page_range is None:
             return
@@ -258,6 +274,7 @@ class PDFVaultApp:
         btn_frame.pack(fill="x", padx=12, pady=6)
         ttk.Button(btn_frame, text="Merge Selected", command=self.merge_selected).pack(side="left", padx=(0, 6))
         ttk.Button(btn_frame, text="Split Selected", command=self.split_selected).pack(side="left", padx=6)
+        ttk.Button(btn_frame, text="Individual Splits", command=self.individual_splits).pack(side="left", padx=6)
         ttk.Button(btn_frame, text="Create Master PDF\u2026", command=self.create_master).pack(side="left", padx=6)
         ttk.Button(btn_frame, text="Open Library Folder", command=self.open_library).pack(side="left", padx=6)
 
@@ -399,11 +416,20 @@ class PDFVaultApp:
             messagebox.showerror("Merge failed", str(e))
 
     def split_selected(self):
+        """Extract pages x-y of the selected PDF into one new PDF."""
         paths = self.selected_paths()
         if len(paths) != 1:
             messagebox.showinfo("Split", "Select exactly one PDF in the library list.")
             return
-        SplitDialog(self.root, paths[0], self.set_status)
+        SplitRangeDialog(self.root, paths[0], self.set_status)
+
+    def individual_splits(self):
+        """Split pages of the selected PDF into one file per page."""
+        paths = self.selected_paths()
+        if len(paths) != 1:
+            messagebox.showinfo("Individual Splits", "Select exactly one PDF in the library list.")
+            return
+        IndividualSplitsDialog(self.root, paths[0], self.set_status)
 
     def create_master(self):
         """Build the combined master PDF only when the user asks for it."""

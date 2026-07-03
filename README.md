@@ -9,9 +9,8 @@ Features:
 
 - **Visual preview panel** — click a PDF in the library to see its rendered pages, with ◀/▶ page navigation
 - **Merge** — combine selected PDFs into one new file, saved wherever you choose
-- **Split** — dialog with live page preview and a from/to page range, offering two actions:
-  - *Save Range as One PDF…* — extract e.g. pages 1-10 into a single new file, saved wherever you choose
-  - *Split Each Page to Files…* — write each page in the range as its own one-page PDF
+- **Split Selected** — dialog with live page preview; pick pages x to y and save them as *one new PDF* wherever you choose
+- **Individual Splits** — dialog with live page preview; pick a page range and write *each page as its own one-page PDF* into a folder you choose
 - **Create Master PDF…** — combines your whole library into one PDF, only when you ask for it, saved wherever you choose (nothing is generated automatically)
 - **Unselect** button (or press `Escape`) to clear the selection and preview
 - **Storage folder setup** — on first launch you pick where PDF Vault stores its files; change it anytime via *Change Storage Folder…* (setting saved in `~/.pdf_vault_config.json`)
