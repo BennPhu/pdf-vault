@@ -14,7 +14,7 @@ $PYTHON -m PyInstaller \
   --name "PDF Vault" \
   --icon images/PDFVault.icns \
   --osx-bundle-identifier "com.bennphu.pdfvault" \
-  --collect-all tkinterdnd2 \
+  --add-data "web:web" \
   --noconfirm \
   app.py
 

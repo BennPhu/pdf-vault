@@ -1,13 +1,15 @@
 """Core PDF logic for PDF Vault: config, add/append, merge, split, and index management."""
 
+import base64
 import json
 import shutil
 from datetime import datetime
 from pathlib import Path
 
+import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -307,3 +309,26 @@ def library_path(filename):
 def page_count(path):
     """Number of pages in a PDF."""
     return len(_validate_pdf(path).pages)
+
+
+def render_page_b64(path, page_number=1, max_px=900):
+    """Render a 1-based page as a base64 PNG data string for the web UI.
+
+    Returns (data, total_pages) where data is a base64-encoded PNG.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise PDFError(f"File not found: {path}")
+    try:
+        with fitz.open(str(path)) as doc:
+            total = len(doc)
+            if not (1 <= page_number <= total):
+                raise PDFError(f"Page {page_number} out of range (1-{total}).")
+            page = doc[page_number - 1]
+            zoom = min(max_px / page.rect.width, max_px / page.rect.height, 4.0)
+            pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+            return base64.b64encode(pix.tobytes("png")).decode("ascii"), total
+    except PDFError:
+        raise
+    except Exception as e:
+        raise PDFError(f"Cannot render '{path.name}': {e}")
