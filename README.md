@@ -3,14 +3,16 @@
 A local drag-and-drop desktop app for collecting PDFs. Drop PDFs into the window and they are:
 
 1. Copied into a `library/` folder inside your chosen storage location
-2. Appended to a single growing `master.pdf`
-3. Recorded in `index.json` (filename, date added, page count, size)
+2. Recorded in `index.json` (filename, date added, page count, size)
 
 Features:
 
 - **Visual preview panel** — click a PDF in the library to see its rendered pages, with ◀/▶ page navigation
 - **Merge** — combine selected PDFs into one new file, saved wherever you choose
-- **Split** — dialog with live page preview and from/to page range; saves pages wherever you choose
+- **Split** — dialog with live page preview and a from/to page range, offering two actions:
+  - *Save Range as One PDF…* — extract e.g. pages 1-10 into a single new file, saved wherever you choose
+  - *Split Each Page to Files…* — write each page in the range as its own one-page PDF
+- **Create Master PDF…** — combines your whole library into one PDF, only when you ask for it, saved wherever you choose (nothing is generated automatically)
 - **Unselect** button (or press `Escape`) to clear the selection and preview
 - **Storage folder setup** — on first launch you pick where PDF Vault stores its files; change it anytime via *Change Storage Folder…* (setting saved in `~/.pdf_vault_config.json`)
 
@@ -38,7 +40,7 @@ Or from a terminal:
 - On first launch, choose the folder where PDF Vault should store your files.
 - Drag PDFs onto the drop zone (or click **+ Add PDFs** to use a file picker).
 - Click a library entry to preview it; select entries and use **Merge Selected** or **Split Selected**.
-- **Open Master PDF** / **Open Library Folder** buttons open the combined file / storage folder.
+- **Create Master PDF…** builds the combined library PDF on demand; **Open Library Folder** opens the storage folder.
 
 ## Notes
 

@@ -129,7 +129,10 @@ class SplitDialog(tk.Toplevel):
 
         btns = ttk.Frame(self)
         btns.pack(pady=(4, 10))
-        ttk.Button(btns, text="Split & Save\u2026", command=self.do_split).pack(side="left", padx=6)
+        ttk.Button(btns, text="Save Range as One PDF\u2026",
+                   command=self.do_extract).pack(side="left", padx=6)
+        ttk.Button(btns, text="Split Each Page to Files\u2026",
+                   command=self.do_split_pages).pack(side="left", padx=6)
         ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="left", padx=6)
 
     def _jump(self, var):
@@ -138,15 +141,45 @@ class SplitDialog(tk.Toplevel):
         except ValueError:
             pass
 
-    def do_split(self):
+    def _get_range(self):
         try:
-            start = int(self.start_var.get())
-            end = int(self.end_var.get())
+            return int(self.start_var.get()), int(self.end_var.get())
         except ValueError:
             messagebox.showerror("Split", "Page numbers must be integers.", parent=self)
+            return None
+
+    def do_extract(self):
+        """Save the selected page range as one new PDF file."""
+        page_range = self._get_range()
+        if page_range is None:
             return
+        start, end = page_range
+        output = filedialog.asksaveasfilename(
+            title="Save extracted pages as",
+            defaultextension=".pdf",
+            filetypes=[("PDF files", "*.pdf")],
+            initialfile=f"{self.pdf_path.stem}_pages_{start}-{end}.pdf",
+            initialdir=pdf_core.last_output_dir(),
+            parent=self,
+        )
+        if not output:
+            return
+        try:
+            pdf_core.extract_pages(self.pdf_path, start, end, output)
+            pdf_core.set_last_output_dir(Path(output).parent)
+            self.status_cb(f"Saved pages {start}-{end} to {output}")
+            self.destroy()
+        except PDFError as e:
+            messagebox.showerror("Split failed", str(e), parent=self)
+
+    def do_split_pages(self):
+        """Split the selected page range into one file per page."""
+        page_range = self._get_range()
+        if page_range is None:
+            return
+        start, end = page_range
         output_dir = filedialog.askdirectory(
-            title="Choose folder for split pages",
+            title="Choose folder for the one-page files",
             initialdir=pdf_core.last_output_dir(),
             parent=self,
         )
@@ -155,7 +188,7 @@ class SplitDialog(tk.Toplevel):
         try:
             written = pdf_core.split_pdf(self.pdf_path, output_dir, start, end)
             pdf_core.set_last_output_dir(output_dir)
-            self.status_cb(f"Split into {len(written)} page file(s) in {output_dir}")
+            self.status_cb(f"Split into {len(written)} one-page file(s) in {output_dir}")
             self.destroy()
         except PDFError as e:
             messagebox.showerror("Split failed", str(e), parent=self)
@@ -225,7 +258,7 @@ class PDFVaultApp:
         btn_frame.pack(fill="x", padx=12, pady=6)
         ttk.Button(btn_frame, text="Merge Selected", command=self.merge_selected).pack(side="left", padx=(0, 6))
         ttk.Button(btn_frame, text="Split Selected", command=self.split_selected).pack(side="left", padx=6)
-        ttk.Button(btn_frame, text="Open Master PDF", command=self.open_master).pack(side="left", padx=6)
+        ttk.Button(btn_frame, text="Create Master PDF\u2026", command=self.create_master).pack(side="left", padx=6)
         ttk.Button(btn_frame, text="Open Library Folder", command=self.open_library).pack(side="left", padx=6)
 
         # Status bar
@@ -342,7 +375,7 @@ class PDFVaultApp:
         if errors:
             messagebox.showwarning("Some files failed", "\n".join(errors))
         if added:
-            self.set_status(f"Added {added} PDF(s). Master updated.")
+            self.set_status(f"Added {added} PDF(s) to the library.")
 
     def merge_selected(self):
         paths = self.selected_paths()
@@ -372,12 +405,25 @@ class PDFVaultApp:
             return
         SplitDialog(self.root, paths[0], self.set_status)
 
-    def open_master(self):
-        master = pdf_core.master_pdf_path()
-        if master.exists():
-            subprocess.run(["open", str(master)])
-        else:
-            messagebox.showinfo("Master PDF", "No master.pdf yet \u2014 add a PDF first.")
+    def create_master(self):
+        """Build the combined master PDF only when the user asks for it."""
+        output = filedialog.asksaveasfilename(
+            title="Save master PDF as",
+            defaultextension=".pdf",
+            filetypes=[("PDF files", "*.pdf")],
+            initialfile="master.pdf",
+            initialdir=pdf_core.last_output_dir(),
+        )
+        if not output:
+            return
+        try:
+            pdf_core.build_master(output)
+            pdf_core.set_last_output_dir(Path(output).parent)
+            self.set_status(f"Master PDF created: {output}")
+            if messagebox.askyesno("Master PDF", "Master PDF created. Open it now?"):
+                subprocess.run(["open", output])
+        except PDFError as e:
+            messagebox.showerror("Create Master failed", str(e))
 
     def open_library(self):
         pdf_core.ensure_dirs()

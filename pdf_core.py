@@ -67,10 +67,6 @@ def library_dir():
     return storage_dir() / "library"
 
 
-def master_pdf_path():
-    return storage_dir() / "master.pdf"
-
-
 def index_file_path():
     return storage_dir() / "index.json"
 
@@ -141,24 +137,8 @@ def _unique_dest(directory, filename):
     return dest
 
 
-def _append_to_master(reader):
-    """Append all pages of reader to master.pdf (created if missing)."""
-    master = master_pdf_path()
-    writer = PdfWriter()
-    if master.exists():
-        master_reader = PdfReader(str(master))
-        for page in master_reader.pages:
-            writer.add_page(page)
-    for page in reader.pages:
-        writer.add_page(page)
-    tmp = master.with_suffix(".pdf.tmp")
-    with open(tmp, "wb") as f:
-        writer.write(f)
-    tmp.replace(master)
-
-
 def add_pdf(source_path):
-    """Add a PDF: copy to library, append to master, update index.
+    """Add a PDF: copy to library and update the index.
 
     Returns the index entry dict.
     """
@@ -168,12 +148,6 @@ def add_pdf(source_path):
 
     dest = _unique_dest(library_dir(), source_path.name)
     shutil.copy2(source_path, dest)
-
-    try:
-        _append_to_master(reader)
-    except Exception as e:
-        dest.unlink(missing_ok=True)
-        raise PDFError(f"Failed to append to master.pdf: {e}")
 
     entry = {
         "filename": dest.name,
@@ -196,6 +170,49 @@ def merge_pdfs(paths, output_path):
         reader = _validate_pdf(p)
         for page in reader.pages:
             writer.add_page(page)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "wb") as f:
+        writer.write(f)
+    return output_path
+
+
+def extract_pages(source_path, start, end, output_path):
+    """Extract a 1-based inclusive page range into a single new PDF file."""
+    reader = _validate_pdf(source_path)
+    total = len(reader.pages)
+    if not (1 <= start <= end <= total):
+        raise PDFError(f"Invalid page range {start}-{end} (document has {total} pages).")
+    writer = PdfWriter()
+    for i in range(start - 1, end):
+        writer.add_page(reader.pages[i])
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "wb") as f:
+        writer.write(f)
+    return output_path
+
+
+def build_master(output_path):
+    """Combine every PDF in the library (index order) into one master PDF.
+
+    Only runs when the user explicitly asks for it.
+    """
+    index = load_index()
+    if not index:
+        raise PDFError("Library is empty — add some PDFs first.")
+    writer = PdfWriter()
+    missing = []
+    for entry in index:
+        path = library_path(entry["filename"])
+        if not path.exists():
+            missing.append(entry["filename"])
+            continue
+        reader = _validate_pdf(path)
+        for page in reader.pages:
+            writer.add_page(page)
+    if missing:
+        raise PDFError("Missing library files: " + ", ".join(missing))
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "wb") as f:

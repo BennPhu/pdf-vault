@@ -4,7 +4,7 @@
 
 _Last updated: Jul 3, 2026_
 
-## Current status: v2 (functional MVP+)
+## Current status: MVP 1 final — functionality complete; next phase is UI/UX
 
 ### Done — v1 (MVP)
 - [x] Drag-and-drop window to add PDFs (tkinter + tkinterdnd2)
@@ -23,6 +23,12 @@ _Last updated: Jul 3, 2026_
 - [x] Split dialog with live page preview + from/to spinboxes
 - [x] Merge/split output saved wherever the user chooses; last folder remembered
 - [x] Unselect button + Escape key
+
+### Done — MVP 1 final
+- [x] Split dialog reworked: *Save Range as One PDF…* (e.g. pages 1-10 → one new file,
+      user picks save location) and *Split Each Page to Files…* (one-page files)
+- [x] Master PDF is no longer created automatically — *Create Master PDF…* builds it
+      on demand at a user-chosen location (no junk files in the storage folder)
 
 ## Roadmap to the end goal
 
