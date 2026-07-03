@@ -8,5 +8,13 @@ data/
 __pycache__/
 *.pyc
 
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+
+# Test cache
+.pytest_cache/
+
 # macOS
 .DS_Store

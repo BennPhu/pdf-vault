@@ -15,9 +15,16 @@ Features:
 - **Unselect** button (or press `Escape`) to clear the selection and preview
 - **Storage folder setup** — on first launch you pick where PDF Vault stores its files; change it anytime via *Change Storage Folder…* (setting saved in `~/.pdf_vault_config.json`)
 
-Everything runs fully locally — no internet, no server.
+Everything runs fully locally. The only network call is the optional update check against GitHub Releases (see `SECURITY.md`).
 
-## Install
+## Install (users)
+
+1. Download the latest `PDF-Vault-*-macos.zip` from [Releases](https://github.com/BennPhu/pdf-vault/releases).
+2. Unzip and drag **PDF Vault.app** to Applications.
+3. First launch: right-click the app → **Open** (the build is unsigned).
+4. The app offers updates automatically when a new version is released.
+
+## Install (developers)
 
 ```bash
 cd pdf-vault

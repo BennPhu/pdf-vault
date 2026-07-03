@@ -1,6 +1,7 @@
 """PDF Vault - local drag-and-drop PDF collector with preview, merge/split tools."""
 
 import subprocess
+import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -8,7 +9,8 @@ from tkinter import filedialog, messagebox, ttk
 import fitz
 
 import pdf_core
-from pdf_core import PDFError
+import updater
+from pdf_core import PDFError, __version__
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -213,7 +215,7 @@ class IndividualSplitsDialog(BaseSplitDialog):
 class PDFVaultApp:
     def __init__(self, root):
         self.root = root
-        root.title("PDF Vault")
+        root.title(f"PDF Vault {__version__}")
         root.geometry("980x620")
         root.minsize(760, 500)
 
@@ -240,6 +242,8 @@ class PDFVaultApp:
         ttk.Button(top_btns, text="+ Add PDFs", command=self.add_via_dialog).pack(side="left")
         ttk.Button(top_btns, text="Unselect", command=self.unselect).pack(side="left", padx=6)
         ttk.Button(top_btns, text="Change Storage Folder\u2026", command=self.change_storage).pack(side="right")
+        ttk.Button(top_btns, text="Check for Updates",
+                   command=lambda: self.check_updates(manual=True)).pack(side="right", padx=6)
 
         # Two-pane: library list | preview
         paned = ttk.PanedWindow(root, orient="horizontal")
@@ -287,6 +291,56 @@ class PDFVaultApp:
 
         pdf_core.ensure_dirs()
         self.refresh_library()
+        self.check_updates(manual=False)
+
+    # ---------------------------------------------------------------- updates
+
+    def check_updates(self, manual=False):
+        """Check GitHub for a newer release in a background thread."""
+        def worker():
+            try:
+                update = updater.check_for_update()
+            except updater.UpdateError as e:
+                if manual:
+                    self.root.after(0, lambda: messagebox.showwarning("Updates", str(e)))
+                return  # silent when offline on auto-check
+            self.root.after(0, lambda: self._offer_update(update, manual))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _offer_update(self, update, manual):
+        if update is None:
+            if manual:
+                messagebox.showinfo("Updates", f"You are up to date (version {__version__}).")
+            return
+        if not messagebox.askyesno(
+            "Update available",
+            f"PDF Vault {update['version']} is available "
+            f"(you have {__version__}).\n\nDownload and install now?",
+        ):
+            return
+
+        def worker():
+            try:
+                result = updater.download_and_install(
+                    update, progress_cb=lambda m: self.root.after(0, self.set_status, m))
+            except updater.UpdateError as e:
+                self.root.after(0, lambda: messagebox.showerror("Update failed", str(e)))
+                return
+            self.root.after(0, lambda: self._finish_update(result))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_update(self, result):
+        if str(result).endswith(".app"):
+            if messagebox.askyesno("Update installed",
+                                   "Update installed. Relaunch PDF Vault now?"):
+                updater.relaunch(result)
+        else:
+            messagebox.showinfo(
+                "Update downloaded",
+                f"Running from source, so the update was downloaded to:\n{result}\n"
+                "Unzip it to install manually.")
 
     # ------------------------------------------------------------------ setup
 

@@ -31,6 +31,16 @@ _Last updated: Jul 3, 2026_
 - [x] Master PDF is no longer created automatically — *Create Master PDF…* builds it
       on demand at a user-chosen location (no junk files in the storage folder)
 
+### Done — Deployment readiness (v1.0.0)
+- [x] Security hardening: filename sanitization, symlink rejection, size/page limits,
+      config validation, atomic config/index writes
+- [x] Versioning (`__version__` = 1.0.0), MIT LICENSE, pinned dependencies
+- [x] pytest suite (31 tests) in `tests/`
+- [x] PyInstaller packaging (`build.sh` → `PDF Vault.app` + release zip + SHA-256)
+- [x] Auto-updater (`updater.py`): checks GitHub Releases on launch, checksum-verified install
+- [x] GitHub Actions: tests + pip-audit on push; tag push builds & publishes a Release
+- [x] Docs: CHANGELOG.md, RELEASING.md, SECURITY.md, user install instructions
+
 ## Roadmap to the end goal
 
 ### Phase 3 — UI/UX polish (beautiful)

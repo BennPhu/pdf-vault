@@ -7,9 +7,16 @@ from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
 
+__version__ = "1.0.0"
+GITHUB_REPO = "BennPhu/pdf-vault"
+
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_DATA_DIR = BASE_DIR / "data"
 CONFIG_FILE = Path.home() / ".pdf_vault_config.json"
+
+# Security limits for untrusted PDF input
+MAX_FILE_SIZE_MB = 500
+MAX_PAGES = 10000
 
 _config = None
 
@@ -20,6 +27,31 @@ class PDFError(Exception):
 
 # --------------------------------------------------------------------- config
 
+def _atomic_write_json(path, data):
+    """Write JSON atomically (temp file + rename) to prevent corruption."""
+    path = Path(path)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    tmp.replace(path)
+
+
+def _validate_config(cfg):
+    """Drop untrusted/invalid config values instead of trusting them blindly."""
+    if not isinstance(cfg, dict):
+        return {}
+    clean = {}
+    storage = cfg.get("storage_dir")
+    if isinstance(storage, str):
+        p = Path(storage)
+        if p.is_absolute() and (p.is_dir() or not p.exists()):
+            clean["storage_dir"] = storage
+    out = cfg.get("last_output_dir")
+    if isinstance(out, str) and Path(out).is_absolute():
+        clean["last_output_dir"] = out
+    return clean
+
+
 def load_config():
     """Load config from disk (cached). Returns dict or empty dict if unset."""
     global _config
@@ -27,7 +59,7 @@ def load_config():
         if CONFIG_FILE.exists():
             try:
                 with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    _config = json.load(f)
+                    _config = _validate_config(json.load(f))
             except (json.JSONDecodeError, OSError):
                 _config = {}
         else:
@@ -36,11 +68,10 @@ def load_config():
 
 
 def save_config(**updates):
-    """Update and persist the config."""
+    """Update and persist the config atomically."""
     cfg = load_config()
     cfg.update(updates)
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2)
+    _atomic_write_json(CONFIG_FILE, cfg)
     return cfg
 
 
@@ -100,17 +131,36 @@ def load_index():
 
 def save_index(index):
     ensure_dirs()
-    with open(index_file_path(), "w", encoding="utf-8") as f:
-        json.dump(index, f, indent=2)
+    _atomic_write_json(index_file_path(), index)
+
+
+def sanitize_filename(name):
+    """Strip path separators and control characters from a filename."""
+    name = Path(name).name  # drop any directory components
+    name = "".join(c for c in name if c.isprintable() and c not in '\\/:*?"<>|')
+    name = name.strip(". ")
+    if not name or name == ".pdf":
+        name = "unnamed.pdf"
+    if not name.lower().endswith(".pdf"):
+        name += ".pdf"
+    return name
 
 
 def _validate_pdf(path):
-    """Return a PdfReader if the file is a readable PDF, else raise PDFError."""
+    """Return a PdfReader if the file is a safe, readable PDF, else raise PDFError."""
     path = Path(path)
     if not path.exists():
         raise PDFError(f"File not found: {path}")
+    if path.is_symlink():
+        raise PDFError(f"Symlinks are not allowed: {path.name}")
+    if not path.is_file():
+        raise PDFError(f"Not a regular file: {path.name}")
     if path.suffix.lower() != ".pdf":
         raise PDFError(f"Not a PDF file: {path.name}")
+    size_mb = path.stat().st_size / (1024 * 1024)
+    if size_mb > MAX_FILE_SIZE_MB:
+        raise PDFError(
+            f"File too large ({size_mb:.0f} MB > {MAX_FILE_SIZE_MB} MB limit): {path.name}")
     try:
         reader = PdfReader(str(path))
         if reader.is_encrypted:
@@ -118,7 +168,9 @@ def _validate_pdf(path):
                 reader.decrypt("")
             except Exception:
                 raise PDFError(f"PDF is password-protected: {path.name}")
-        _ = len(reader.pages)
+        if len(reader.pages) > MAX_PAGES:
+            raise PDFError(
+                f"Too many pages ({len(reader.pages)} > {MAX_PAGES} limit): {path.name}")
         return reader
     except PDFError:
         raise
@@ -146,7 +198,7 @@ def add_pdf(source_path):
     source_path = Path(source_path)
     reader = _validate_pdf(source_path)
 
-    dest = _unique_dest(library_dir(), source_path.name)
+    dest = _unique_dest(library_dir(), sanitize_filename(source_path.name))
     shutil.copy2(source_path, dest)
 
     entry = {
