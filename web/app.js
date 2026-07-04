@@ -13,6 +13,42 @@ let splitMode = null;      // "range" | "individual"
 let splitPage = 1;
 let splitTotal = 1;
 
+/* ---------------------------------------------------- animated background */
+
+const BG_WORDS = ["PDF", "VAULT", "MERGE", "SPLIT", "LIBRARY", "PREVIEW",
+                  "PAGES", "MASTER", "STORAGE", "PNG", "JPG", "SVG"];
+const BG_WORD_COUNT = 170; // cap for low-end machines
+
+function buildBackground() {
+  const layer = $("bg-words");
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < BG_WORD_COUNT; i++) {
+    const span = document.createElement("span");
+    span.textContent = BG_WORDS[Math.floor(Math.random() * BG_WORDS.length)];
+    const sharp = Math.random() < 0.12; // ~12% bright foreground words
+    const size = sharp ? 16 + Math.random() * 12 : 10 + Math.random() * 12;
+    const opacity = sharp ? 0.55 + Math.random() * 0.35 : 0.08 + Math.random() * 0.17;
+    const blur = sharp ? 0 : Math.random() * 3;
+    const color = sharp
+      ? (Math.random() < 0.5 ? "#63b3ed" : "#ebf8ff")
+      : "#cad5e2";
+    span.style.left = Math.random() * 98 + "%";
+    span.style.top = Math.random() * 98 + "%";
+    span.style.fontSize = size.toFixed(1) + "px";
+    span.style.color = color;
+    if (blur > 0.2) span.style.filter = `blur(${blur.toFixed(2)}px)`;
+    span.style.animationDuration = (8 + Math.random() * 12).toFixed(2) + "s";
+    span.style.animationDelay = (-Math.random() * 20).toFixed(2) + "s";
+    span.style.setProperty("--wo", opacity.toFixed(3));
+    span.style.setProperty("--dx", (Math.random() * 10 - 5).toFixed(1) + "px");
+    span.style.setProperty("--dy", (Math.random() * 10 - 5).toFixed(1) + "px");
+    frag.appendChild(span);
+  }
+  layer.appendChild(frag); // positions generated once; never reshuffled
+}
+
+document.addEventListener("DOMContentLoaded", buildBackground);
+
 /* ------------------------------------------------------------ bootstrap */
 
 window.addEventListener("pywebviewready", init);
@@ -338,7 +374,7 @@ function toast(message, kind) {
 /* --------------------------------------------- tiny confetti celebration */
 
 function celebrate() {
-  const colors = ["#E07A5F", "#F4A259", "#7FB069", "#F2CC8F"];
+  const colors = ["#63b3ed", "#ebf8ff", "#f6ad55", "#cad5e2"];
   for (let i = 0; i < 18; i++) {
     const dot = document.createElement("div");
     const size = 6 + Math.random() * 6;
