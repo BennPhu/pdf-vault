@@ -3,6 +3,13 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.4.2] - 2026-07-09
+
+### Fixed
+- UI was unresponsive: the Content-Security-Policy added in 1.4.0 blocked
+  pywebview's injected JS bridge; CSP now permits the inline bridge while
+  still blocking all remote script/style/network loading
+
 ## [1.4.1] - 2026-07-09
 
 ### Fixed
