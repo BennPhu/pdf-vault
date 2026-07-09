@@ -9,7 +9,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.2.1"
+__version__ = "1.2.2"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -138,6 +138,47 @@ def load_index():
 def save_index(index):
     ensure_dirs()
     _atomic_write_json(index_file_path(), index)
+
+
+def sync_index():
+    """Reconcile the index with the library folder (self-healing).
+
+    The folder is the source of truth: PDFs on disk that are missing from
+    the index get added, and index entries whose file is gone get dropped.
+    This keeps the UI correct even if files are added or removed outside
+    the app (Finder, drag-and-drop races, etc.). Returns the fresh index.
+    """
+    index = load_index()
+    changed = False
+    lib = library_dir()
+    on_disk = {p.name for p in lib.glob("*.pdf")} if lib.is_dir() else set()
+
+    # Drop entries whose file has disappeared
+    kept = [e for e in index if e["filename"] in on_disk]
+    if len(kept) != len(index):
+        index = kept
+        changed = True
+
+    # Add PDFs on disk that are not indexed yet
+    known = {e["filename"] for e in index}
+    for name in sorted(on_disk - known):
+        path = lib / name
+        try:
+            reader = _validate_pdf(path)
+        except PDFError:
+            continue  # skip unreadable strays
+        index.append({
+            "filename": name,
+            "added": datetime.fromtimestamp(
+                path.stat().st_mtime).isoformat(timespec="seconds"),
+            "pages": len(reader.pages),
+            "size_bytes": path.stat().st_size,
+        })
+        changed = True
+
+    if changed:
+        save_index(index)
+    return index
 
 
 def sanitize_filename(name):

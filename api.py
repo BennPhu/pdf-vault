@@ -56,7 +56,7 @@ class Api:
     def list_library(self):
         """Index entries plus a small page-1 thumbnail for each."""
         entries = []
-        for entry in pdf_core.load_index():
+        for entry in pdf_core.sync_index():
             item = dict(entry)
             path = pdf_core.library_path(entry["filename"])
             item["missing"] = not path.exists()

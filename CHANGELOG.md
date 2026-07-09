@@ -3,6 +3,13 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.2.2] - 2026-07-09
+
+### Fixed
+- Library index now self-heals: the library folder is the source of truth,
+  so PDFs added or removed outside the app (Finder, drop races) always show
+  up correctly in the UI
+
 ## [1.2.1] - 2026-07-09
 
 ### Fixed
