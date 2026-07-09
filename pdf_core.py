@@ -13,7 +13,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -605,7 +605,11 @@ def purge_trash(max_age_days=TRASH_RETENTION_DAYS):
         return 0
     cutoff = datetime.now().timestamp() - max_age_days * 86400
     removed = 0
-    for item in tdir.iterdir():
+    try:
+        items = list(tdir.iterdir())
+    except OSError:
+        return 0  # folder unreadable (e.g. macOS TCC denial) — never crash
+    for item in items:
         try:
             if item.is_file() and item.stat().st_mtime < cutoff:
                 item.unlink()

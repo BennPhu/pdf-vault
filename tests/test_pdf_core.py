@@ -246,6 +246,15 @@ def test_purge_trash_removes_old_files(vault):
     assert fresh.exists()
 
 
+def test_purge_trash_survives_unreadable_folder(vault, monkeypatch):
+    pdf_core.trash_dir().mkdir(parents=True, exist_ok=True)
+
+    def deny(self):
+        raise PermissionError(1, "Operation not permitted")
+    monkeypatch.setattr(type(pdf_core.trash_dir()), "iterdir", deny)
+    assert pdf_core.purge_trash() == 0  # must not raise
+
+
 def test_log_rotation(vault):
     log = pdf_core.log_file_path()
     log.write_text("x" * (pdf_core.LOG_MAX_BYTES + 1))
