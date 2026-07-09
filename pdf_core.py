@@ -5,6 +5,7 @@ import json
 import os
 import resource
 import shutil
+import subprocess
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +13,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.3.1"
+__version__ = "1.4.0"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -22,6 +23,10 @@ CONFIG_FILE = Path.home() / ".pdf_vault_config.json"
 # Security limits for untrusted PDF input
 MAX_FILE_SIZE_MB = 500
 MAX_PAGES = 10000
+
+# Storage housekeeping
+TRASH_RETENTION_DAYS = 30
+LOG_MAX_BYTES = 512 * 1024
 
 _config = None
 
@@ -48,7 +53,10 @@ def log_event(action, detail=""):
     }
     _activity_log.append(event)
     try:
-        with open(log_file_path(), "a", encoding="utf-8") as f:
+        log_path = log_file_path()
+        if log_path.exists() and log_path.stat().st_size > LOG_MAX_BYTES:
+            log_path.replace(log_path.with_suffix(".log.1"))  # keep one generation
+        with open(log_path, "a", encoding="utf-8") as f:
             f.write(f"{event['time']}  {action:<10} {event['detail']}\n")
     except OSError:
         pass  # logging must never break the app
@@ -73,11 +81,23 @@ def _dir_size(path):
     return total
 
 
+def _current_rss_mb():
+    """Current resident memory in MB (peak != current; ask ps)."""
+    try:
+        out = subprocess.run(
+            ["ps", "-o", "rss=", "-p", str(os.getpid())],
+            capture_output=True, text=True, timeout=5)
+        return round(int(out.stdout.strip()) / 1024, 1)  # ps reports KB
+    except (ValueError, OSError, subprocess.SubprocessError):
+        return None
+
+
 def get_stats():
     """Program + storage statistics for the settings log page."""
     usage = resource.getrusage(resource.RUSAGE_SELF)
     # ru_maxrss is bytes on macOS
-    memory_mb = usage.ru_maxrss / (1024 * 1024)
+    peak_mb = usage.ru_maxrss / (1024 * 1024)
+    memory_mb = _current_rss_mb()
     lib, trash = library_dir(), trash_dir()
     lib_files = list(lib.glob("*.pdf")) if lib.is_dir() else []
     trash_files = list(trash.glob("*.pdf")) if trash.is_dir() else []
@@ -91,7 +111,8 @@ def get_stats():
     return {
         "version": __version__,
         "uptime_seconds": int(uptime.total_seconds()),
-        "memory_mb": round(memory_mb, 1),
+        "memory_mb": memory_mb if memory_mb is not None else round(peak_mb, 1),
+        "peak_memory_mb": round(peak_mb, 1),
         "cpu_seconds": round(usage.ru_utime + usage.ru_stime, 1),
         "storage_dir": str(storage_dir()),
         "library_files": len(lib_files),
@@ -180,6 +201,10 @@ def library_dir():
 
 def trash_dir():
     return storage_dir() / ".trash"
+
+
+def thumbs_dir():
+    return storage_dir() / ".thumbs"
 
 
 def index_file_path():
@@ -281,6 +306,7 @@ def sync_index():
     if changed:
         save_index(index)
         log_event("sync", f"index reconciled with folder ({len(index)} files)")
+        _prune_thumbs(on_disk)
     return index
 
 
@@ -385,11 +411,12 @@ def delete_pdf(filename):
 def restore_pdf(entry):
     """Undo a delete: move the file back from trash and re-add its index entry."""
     filename = entry["filename"]
+    dest = library_path(filename)  # validates the filename (no traversal)
     trash_path = trash_dir() / filename
     if not trash_path.exists():
         raise PDFError(f"Cannot restore (no longer in trash): {filename}")
     ensure_dirs()
-    shutil.move(str(trash_path), str(library_dir() / filename))
+    shutil.move(str(trash_path), str(dest))
     index = load_index()
     if not any(e["filename"] == filename for e in index):
         index.append(entry)
@@ -489,7 +516,15 @@ def split_pdf(source_path, output_dir, start=None, end=None):
 
 
 def library_path(filename):
-    """Absolute path of a file stored in the library."""
+    """Absolute path of a file stored in the library.
+
+    Rejects path traversal: the JS bridge passes filenames, and nothing
+    it sends may escape the library folder.
+    """
+    filename = str(filename)
+    if (not filename or filename != Path(filename).name
+            or filename in (".", "..") or filename.startswith("/")):
+        raise PDFError(f"Invalid filename: {filename!r}")
     return library_dir() / filename
 
 
@@ -499,9 +534,10 @@ def page_count(path):
 
 
 def render_page_b64(path, page_number=1, max_px=900):
-    """Render a 1-based page as a base64 PNG data string for the web UI.
+    """Render a 1-based page as a base64 JPEG data string for the web UI.
 
-    Returns (data, total_pages) where data is a base64-encoded PNG.
+    JPEG keeps the base64 payload (and WebView memory) ~5-10x smaller
+    than PNG. Returns (data, total_pages).
     """
     path = Path(path)
     if not path.exists():
@@ -514,8 +550,83 @@ def render_page_b64(path, page_number=1, max_px=900):
             page = doc[page_number - 1]
             zoom = min(max_px / page.rect.width, max_px / page.rect.height, 4.0)
             pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
-            return base64.b64encode(pix.tobytes("png")).decode("ascii"), total
+            data = pix.tobytes("jpeg", jpg_quality=80)
+            pix = None
+            return base64.b64encode(data).decode("ascii"), total
     except PDFError:
         raise
     except Exception as e:
         raise PDFError(f"Cannot render '{path.name}': {e}")
+
+
+def get_thumbnail_b64(filename, max_px=240):
+    """Base64 JPEG thumbnail of page 1, cached on disk in .thumbs/.
+
+    Cache key includes the source file's mtime so edited files re-render.
+    Returns None if the file cannot be rendered.
+    """
+    path = library_path(filename)
+    if not path.exists():
+        return None
+    try:
+        mtime = int(path.stat().st_mtime)
+    except OSError:
+        return None
+    thumb_path = thumbs_dir() / f"{filename}.{mtime}.jpg"
+    if thumb_path.exists():
+        try:
+            return base64.b64encode(thumb_path.read_bytes()).decode("ascii")
+        except OSError:
+            pass
+    try:
+        with fitz.open(str(path)) as doc:
+            page = doc[0]
+            zoom = min(max_px / page.rect.width, max_px / page.rect.height, 4.0)
+            pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+            data = pix.tobytes("jpeg", jpg_quality=75)
+            pix = None
+    except Exception:
+        return None
+    try:
+        thumbs_dir().mkdir(parents=True, exist_ok=True)
+        # Drop stale generations of this file's thumbnail first
+        for old in thumbs_dir().glob(f"{filename}.*.jpg"):
+            old.unlink(missing_ok=True)
+        thumb_path.write_bytes(data)
+    except OSError:
+        pass  # cache is best-effort
+    return base64.b64encode(data).decode("ascii")
+
+
+def purge_trash(max_age_days=TRASH_RETENTION_DAYS):
+    """Delete trashed PDFs older than max_age_days. Returns count removed."""
+    tdir = trash_dir()
+    if not tdir.is_dir():
+        return 0
+    cutoff = datetime.now().timestamp() - max_age_days * 86400
+    removed = 0
+    for item in tdir.iterdir():
+        try:
+            if item.is_file() and item.stat().st_mtime < cutoff:
+                item.unlink()
+                removed += 1
+        except OSError:
+            continue
+    if removed:
+        log_event("purge", f"{removed} file(s) older than {max_age_days} days removed from trash")
+    return removed
+
+
+def _prune_thumbs(valid_filenames):
+    """Delete cached thumbnails whose source file left the library."""
+    tdir = thumbs_dir()
+    if not tdir.is_dir():
+        return
+    for thumb in tdir.glob("*.jpg"):
+        # thumb name: <filename>.<mtime>.jpg
+        source = thumb.name.rsplit(".", 2)[0]
+        if source not in valid_filenames:
+            try:
+                thumb.unlink()
+            except OSError:
+                pass

@@ -28,6 +28,19 @@ How to ship an update to users (the auto-updater picks it up automatically).
 5. **Users get it automatically** — the app checks for updates on launch,
    verifies the checksum, and installs.
 
+## Pre-open-source checklist (one-time, before making the repo public)
+
+1. **Scan for secrets/personal info:** `brew install gitleaks && gitleaks detect`.
+   Commit history contains local folder paths (e.g. `/Users/<name>/...`) in
+   messages/diffs — if that matters to you, squash to a fresh initial commit:
+   ```bash
+   git checkout --orphan public && git add -A && git commit -m "PDF Vault v1.4.0"
+   git branch -M public main && git push -f origin main
+   ```
+2. **Remove internal notes:** delete or trim `PROGRESS.md`.
+3. **Verify ignores:** `data/`, `dist/`, `build/`, `.venv/` must stay untracked.
+4. **Confirm LICENSE** (MIT) and that `SECURITY.md` reflects the current design.
+
 ## Manual build (optional)
 
 ```bash

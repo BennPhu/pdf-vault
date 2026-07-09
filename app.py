@@ -1,7 +1,6 @@
 """PDF Vault - entrypoint for the pywebview desktop app.
 
 The UI lives in web/ (HTML/CSS/JS); Python logic is exposed via api.Api.
-The legacy tkinter UI is kept in app_tk.py for one release as a fallback.
 """
 
 import json
@@ -11,6 +10,7 @@ from pathlib import Path
 import webview
 from webview.dom import DOMEventHandler
 
+import pdf_core
 from api import Api
 from pdf_core import __version__
 
@@ -49,6 +49,7 @@ def bind_drag_drop(window, api):
 
 
 def main():
+    pdf_core.purge_trash()
     api = Api()
     window = webview.create_window(
         f"PDF Vault {__version__}",

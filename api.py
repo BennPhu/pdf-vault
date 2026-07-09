@@ -62,11 +62,7 @@ class Api:
             path = pdf_core.library_path(entry["filename"])
             item["missing"] = not path.exists()
             if not item["missing"]:
-                try:
-                    thumb, _ = pdf_core.render_page_b64(path, 1, max_px=240)
-                    item["thumb"] = thumb
-                except PDFError:
-                    item["thumb"] = None
+                item["thumb"] = pdf_core.get_thumbnail_b64(entry["filename"])
             entries.append(item)
         return _ok(entries=entries)
 
@@ -168,6 +164,7 @@ class Api:
                 deleted.append(pdf_core.delete_pdf(filename))
             except PDFError as e:
                 errors.append(str(e))
+        pdf_core.purge_trash()
         return _ok(deleted=deleted, errors=errors)
 
     def restore(self, entries):
@@ -198,8 +195,7 @@ class Api:
             return _err(e)
         if update is None:
             return _ok(update=None)
-        return _ok(update={"version": update["version"], "notes": update["notes"][:500]},
-                   _raw=update)
+        return _ok(update={"version": update["version"], "notes": update["notes"][:500]})
 
     def install_update(self):
         try:

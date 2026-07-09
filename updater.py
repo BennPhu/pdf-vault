@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -19,6 +20,10 @@ from pdf_core import GITHUB_REPO, __version__
 
 API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 REQUEST_TIMEOUT = 10
+MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024   # refuse absurdly large "updates"
+MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # zip-bomb guard
+ALLOWED_DOWNLOAD_HOSTS = {"github.com", "objects.githubusercontent.com",
+                          "release-assets.githubusercontent.com"}
 
 
 class UpdateError(Exception):
@@ -59,7 +64,7 @@ def check_for_update():
         if asset.get("name", "").endswith(".zip"):
             zip_url = asset.get("browser_download_url")
             break
-    if not zip_url:
+    if not zip_url or not _url_allowed(zip_url):
         return None
 
     # Checksum published in the release notes as: SHA256: <hex>
@@ -74,6 +79,27 @@ def check_for_update():
         "sha256": sha256,
         "notes": (release.get("body") or "").strip(),
     }
+
+
+def _url_allowed(url):
+    """Only HTTPS downloads from GitHub-owned hosts are acceptable."""
+    try:
+        parts = urllib.parse.urlparse(url)
+    except ValueError:
+        return False
+    return parts.scheme == "https" and parts.hostname in ALLOWED_DOWNLOAD_HOSTS
+
+
+def _check_zip_safety(zf):
+    """Reject archives with traversal members or excessive uncompressed size."""
+    total = 0
+    for info in zf.infolist():
+        name = info.filename
+        if name.startswith("/") or ".." in Path(name).parts:
+            raise UpdateError(f"Unsafe path in update archive: {name}")
+        total += info.file_size
+        if total > MAX_UNCOMPRESSED_BYTES:
+            raise UpdateError("Update archive is unreasonably large — rejected.")
 
 
 def _running_app_bundle():
@@ -96,6 +122,12 @@ def download_and_install(update, progress_cb=None):
         if progress_cb:
             progress_cb(msg)
 
+    if not update.get("sha256"):
+        raise UpdateError(
+            "Release has no SHA256 checksum in its notes — update rejected for safety.")
+    if not _url_allowed(update["zip_url"]):
+        raise UpdateError("Update download URL is not a trusted GitHub host — rejected.")
+
     report("Downloading update\u2026")
     tmp_dir = Path(tempfile.mkdtemp(prefix="pdf-vault-update-"))
     zip_path = tmp_dir / "update.zip"
@@ -103,15 +135,24 @@ def download_and_install(update, progress_cb=None):
         request = urllib.request.Request(
             update["zip_url"], headers={"User-Agent": f"pdf-vault/{__version__}"})
         with urllib.request.urlopen(request, timeout=60) as resp, open(zip_path, "wb") as f:
-            shutil.copyfileobj(resp, f)
+            written = 0
+            while True:
+                chunk = resp.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > MAX_DOWNLOAD_BYTES:
+                    raise UpdateError("Update download exceeds size limit — rejected.")
+                f.write(chunk)
+    except UpdateError:
+        raise
     except Exception as e:
         raise UpdateError(f"Download failed: {e}")
 
-    if update.get("sha256"):
-        report("Verifying checksum\u2026")
-        digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
-        if digest != update["sha256"]:
-            raise UpdateError("Checksum verification FAILED \u2014 update rejected for safety.")
+    report("Verifying checksum\u2026")
+    digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    if digest != update["sha256"]:
+        raise UpdateError("Checksum verification FAILED \u2014 update rejected for safety.")
 
     app_bundle = _running_app_bundle()
     if app_bundle is None:
@@ -122,6 +163,7 @@ def download_and_install(update, progress_cb=None):
     report("Installing\u2026")
     extract_dir = tmp_dir / "extracted"
     with zipfile.ZipFile(zip_path) as zf:
+        _check_zip_safety(zf)
         zf.extractall(extract_dir)
     new_apps = list(extract_dir.glob("*.app"))
     if not new_apps:

@@ -57,7 +57,7 @@ function renderLibrary() {
 
     const img = document.createElement("img");
     img.className = "card-thumb";
-    if (entry.thumb) img.src = "data:image/png;base64," + entry.thumb;
+    if (entry.thumb) img.src = "data:image/jpeg;base64," + entry.thumb;
     card.appendChild(img);
 
     const name = document.createElement("div");
@@ -110,7 +110,7 @@ async function showPreview(filename, page) {
   previewFile = filename;
   previewPage = res.page;
   previewTotal = res.total;
-  $("preview-img").src = "data:image/png;base64," + res.image;
+  $("preview-img").src = "data:image/jpeg;base64," + res.image;
   $("preview-img").hidden = false;
   $("preview-placeholder").hidden = true;
   $("preview-nav").hidden = false;
@@ -301,7 +301,7 @@ async function showSplitPage(page) {
   const res = await window.pywebview.api.render_page(filename, page);
   if (!res.ok) return;
   splitPage = res.page;
-  $("split-img").src = "data:image/png;base64," + res.image;
+  $("split-img").src = "data:image/jpeg;base64," + res.image;
   $("split-page-label").textContent = `${splitPage} / ${splitTotal}`;
 }
 
@@ -357,6 +357,7 @@ async function refreshActivity() {
     ["Version", "v" + s.version],
     ["Uptime", fmtUptime(s.uptime_seconds)],
     ["Memory", s.memory_mb + " MB"],
+    ["Peak memory", s.peak_memory_mb + " MB"],
     ["CPU time", s.cpu_seconds + " s"],
     ["Library", `${s.library_files} files · ${s.library_mb} MB`],
     ["Trash", `${s.trash_files} files · ${s.trash_mb} MB`],

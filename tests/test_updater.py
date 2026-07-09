@@ -22,7 +22,7 @@ def _fake_release(tag, body="", assets=None):
         "tag_name": tag,
         "body": body,
         "assets": assets if assets is not None else [
-            {"name": "PDF-Vault.zip", "browser_download_url": "https://example.com/x.zip"}
+            {"name": "PDF-Vault.zip", "browser_download_url": "https://github.com/BennPhu/pdf-vault/releases/download/v99.0.0/x.zip"}
         ],
     }
 
@@ -42,7 +42,7 @@ def test_check_for_update_newer(monkeypatch):
     update = updater.check_for_update()
     assert update["version"] == "99.0.0"
     assert update["sha256"] == "a" * 64
-    assert update["zip_url"] == "https://example.com/x.zip"
+    assert update["zip_url"] == "https://github.com/BennPhu/pdf-vault/releases/download/v99.0.0/x.zip"
 
 
 def test_check_for_update_same_version(monkeypatch):
@@ -73,11 +73,65 @@ def test_download_rejects_bad_checksum(monkeypatch, tmp_path):
                         lambda *a, **k: FakeResponse(payload))
     update = {
         "version": "99.0.0",
-        "zip_url": "https://example.com/x.zip",
+        "zip_url": "https://github.com/BennPhu/pdf-vault/releases/download/v99.0.0/x.zip",
         "sha256": "0" * 64,  # wrong on purpose
     }
     with pytest.raises(UpdateError, match="Checksum"):
         updater.download_and_install(update)
+
+
+def test_check_for_update_rejects_untrusted_host(monkeypatch):
+    release = _fake_release("v99.0.0", body="SHA256: " + "a" * 64, assets=[
+        {"name": "evil.zip", "browser_download_url": "https://evil.example.com/x.zip"}])
+    monkeypatch.setattr(updater.urllib.request, "urlopen",
+                        lambda *a, **k: FakeResponse(json.dumps(release).encode()))
+    assert updater.check_for_update() is None
+
+
+def test_download_requires_checksum():
+    update = {"version": "99.0.0",
+              "zip_url": "https://github.com/x/y/releases/download/v99.0.0/x.zip",
+              "sha256": None}
+    with pytest.raises(UpdateError, match="SHA256"):
+        updater.download_and_install(update)
+
+
+def test_download_rejects_http_url():
+    update = {"version": "99.0.0",
+              "zip_url": "http://github.com/x.zip",  # not https
+              "sha256": "a" * 64}
+    with pytest.raises(UpdateError, match="trusted"):
+        updater.download_and_install(update)
+
+
+def test_download_rejects_oversized(monkeypatch):
+    monkeypatch.setattr(updater, "MAX_DOWNLOAD_BYTES", 10)
+    monkeypatch.setattr(updater.urllib.request, "urlopen",
+                        lambda *a, **k: FakeResponse(b"x" * 100))
+    update = {"version": "99.0.0",
+              "zip_url": "https://github.com/x/y/releases/download/v99.0.0/x.zip",
+              "sha256": "a" * 64}
+    with pytest.raises(UpdateError, match="size limit"):
+        updater.download_and_install(update)
+
+
+def test_zip_safety_rejects_traversal(tmp_path):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("../outside.txt", "x")
+    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as zf:
+        with pytest.raises(UpdateError, match="Unsafe path"):
+            updater._check_zip_safety(zf)
+
+
+def test_zip_safety_rejects_bomb(monkeypatch):
+    monkeypatch.setattr(updater, "MAX_UNCOMPRESSED_BYTES", 10)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("big.bin", "x" * 100)
+    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as zf:
+        with pytest.raises(UpdateError, match="large"):
+            updater._check_zip_safety(zf)
 
 
 def test_download_from_source_saves_to_downloads(monkeypatch, tmp_path):
@@ -93,7 +147,7 @@ def test_download_from_source_saves_to_downloads(monkeypatch, tmp_path):
     monkeypatch.setattr(updater.Path, "home", classmethod(lambda cls: tmp_path))
     (tmp_path / "Downloads").mkdir()
 
-    update = {"version": "99.0.0", "zip_url": "https://example.com/x.zip", "sha256": digest}
+    update = {"version": "99.0.0", "zip_url": "https://github.com/BennPhu/pdf-vault/releases/download/v99.0.0/x.zip", "sha256": digest}
     result = updater.download_and_install(update)
     assert Path(result).exists()
     assert result.name == "PDF-Vault-99.0.0.zip"

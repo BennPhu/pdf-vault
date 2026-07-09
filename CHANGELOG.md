@@ -3,6 +3,31 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.4.0] - 2026-07-09 — Security and Memory Optimization
+
+### Security
+- Path-traversal protection: filenames from the UI can no longer reference
+  anything outside the library folder
+- Auto-updater hardened: SHA-256 checksum now mandatory, downloads restricted
+  to HTTPS GitHub hosts and size-capped, archives checked for unsafe paths
+  and zip-bomb size before extraction
+- Strict Content-Security-Policy on the UI
+- CI: least-privilege workflow permissions, actions pinned to commit SHAs,
+  Dependabot enabled; removed legacy app_tk.py
+- SECURITY.md expanded with the full threat model
+
+### Performance
+- Thumbnails are rendered once and cached on disk (.thumbs/) as small JPEGs
+  instead of being re-rendered as PNGs on every refresh
+- Page previews now use JPEG (~5-10x smaller payloads and WebView memory)
+- Activity page shows real current memory usage (previous number was the
+  all-time peak, which never goes down)
+
+### Storage
+- Trash auto-purges files older than 30 days
+- activity.log rotates at 512KB
+- Thumbnail cache cleans itself when files leave the library
+
 ## [1.3.1] - 2026-07-09
 
 ### Fixed

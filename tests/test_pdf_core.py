@@ -178,3 +178,86 @@ def test_index_atomic_write(vault):
     pdf_core.save_index([{"filename": "x.pdf"}])
     assert not pdf_core.index_file_path().with_suffix(".json.tmp").exists()
     assert pdf_core.load_index() == [{"filename": "x.pdf"}]
+
+
+# ------------------------------------------------------------- security
+
+@pytest.mark.parametrize("bad", [
+    "../escape.pdf",
+    "../../etc/passwd",
+    "/etc/passwd",
+    "sub/dir.pdf",
+    "..",
+    "",
+])
+def test_library_path_rejects_traversal(vault, bad):
+    with pytest.raises(PDFError, match="Invalid filename"):
+        pdf_core.library_path(bad)
+
+
+def test_library_path_accepts_normal_names(vault):
+    path = pdf_core.library_path("My Notes (v2) + more.pdf")
+    assert path.parent == pdf_core.library_dir()
+
+
+def test_restore_rejects_traversal_entry(vault):
+    with pytest.raises(PDFError, match="Invalid filename"):
+        pdf_core.restore_pdf({"filename": "../evil.pdf"})
+
+
+# ------------------------------------------------------------ thumbnails
+
+def test_thumbnail_cached_on_disk(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 1))
+    thumb = pdf_core.get_thumbnail_b64(entry["filename"])
+    assert thumb
+    cached = list(pdf_core.thumbs_dir().glob("doc.pdf.*.jpg"))
+    assert len(cached) == 1
+    # Second call must serve the exact cached bytes
+    assert pdf_core.get_thumbnail_b64(entry["filename"]) == thumb
+
+
+def test_thumbnail_pruned_when_file_removed(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 1))
+    pdf_core.get_thumbnail_b64(entry["filename"])
+    pdf_core.library_path(entry["filename"]).unlink()
+    pdf_core.sync_index()
+    assert list(pdf_core.thumbs_dir().glob("*.jpg")) == []
+
+
+def test_thumbnail_missing_file_returns_none(vault):
+    assert pdf_core.get_thumbnail_b64("nope.pdf") is None
+
+
+# ----------------------------------------------------------- housekeeping
+
+def test_purge_trash_removes_old_files(vault):
+    import os
+    import time
+    pdf_core.trash_dir().mkdir(parents=True, exist_ok=True)
+    old = pdf_core.trash_dir() / "old.pdf"
+    old.write_bytes(b"x")
+    ancient = time.time() - 40 * 86400
+    os.utime(old, (ancient, ancient))
+    fresh = pdf_core.trash_dir() / "fresh.pdf"
+    fresh.write_bytes(b"x")
+    assert pdf_core.purge_trash(max_age_days=30) == 1
+    assert not old.exists()
+    assert fresh.exists()
+
+
+def test_log_rotation(vault):
+    log = pdf_core.log_file_path()
+    log.write_text("x" * (pdf_core.LOG_MAX_BYTES + 1))
+    pdf_core.log_event("test", "rotation trigger")
+    assert log.with_suffix(".log.1").exists()
+    assert log.stat().st_size < pdf_core.LOG_MAX_BYTES
+
+
+def test_sync_index_survives_unreadable_folder(vault, monkeypatch):
+    pdf_core.save_index([{"filename": "keep.pdf"}])
+
+    def deny(_):
+        raise PermissionError(1, "Operation not permitted")
+    monkeypatch.setattr(pdf_core.os, "listdir", deny)
+    assert pdf_core.sync_index() == [{"filename": "keep.pdf"}]
