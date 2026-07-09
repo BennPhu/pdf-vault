@@ -12,6 +12,8 @@ let previewTotal = 1;
 let splitMode = null;      // "range" | "individual"
 let splitPage = 1;
 let splitTotal = 1;
+let undoStack = [];        // batches of deleted index entries
+let redoStack = [];        // batches that can be re-deleted
 
 /* ------------------------------------------------------------ bootstrap */
 
@@ -70,6 +72,9 @@ function renderLibrary() {
   }
   $("btn-unselect").hidden = selected.size === 0;
   $("btn-select-all").hidden = library.length === 0 || selected.size === library.length;
+  $("btn-delete").hidden = selected.size === 0;
+  $("btn-undo").hidden = undoStack.length === 0;
+  $("btn-redo").hidden = redoStack.length === 0;
 }
 
 function toggleSelect(filename) {
@@ -135,21 +140,15 @@ const dropzone = $("dropzone");
   })
 );
 
-dropzone.addEventListener("drop", async (e) => {
-  const paths = [];
-  for (const file of e.dataTransfer.files) {
-    // pywebview exposes the real filesystem path on dropped files
-    const p = file.pywebviewFullPath || file.path;
-    if (p) paths.push(p);
-  }
-  if (!paths.length) {
-    toast("Could not read dropped files — use 'click to browse' instead", "error");
-    return;
-  }
+/* Real file paths are not visible to JS on macOS — app.py intercepts the
+   drop natively (pywebview DOM events) and calls onNativeDrop() with the
+   result. The listeners above only provide the visual dragover feedback. */
+window.onNativeDrop = function (res) {
+  dropzone.classList.remove("dragover");
   dropzone.classList.add("bounce");
   setTimeout(() => dropzone.classList.remove("bounce"), 450);
-  await addPaths(paths);
-});
+  handleAddResult(res);
+};
 
 dropzone.addEventListener("click", browse);
 $("btn-browse").addEventListener("click", (e) => { e.stopPropagation(); browse(); });
@@ -187,6 +186,49 @@ document.addEventListener("keydown", (e) => {
     if (!$("split-modal").hidden) closeSplitModal();
     else unselectAll();
   }
+});
+
+$("btn-delete").addEventListener("click", async () => {
+  if (selected.size === 0) return;
+  const n = selected.size;
+  if (!confirm(`Delete ${n} PDF${n > 1 ? "s" : ""} from the vault?`)) return;
+  const res = await window.pywebview.api.delete([...selected]);
+  if (!res.ok) { toast(res.error, "error"); return; }
+  if (res.deleted.length) {
+    undoStack.push(res.deleted);
+    redoStack = []; // a new delete clears the redo history
+    toast(`Deleted ${res.deleted.length} PDF${res.deleted.length > 1 ? "s" : ""}`, "success");
+  }
+  (res.errors || []).forEach((err) => toast(err, "error"));
+  selected.clear();
+  clearPreview();
+  refreshLibrary();
+});
+
+$("btn-undo").addEventListener("click", async () => {
+  const batch = undoStack.pop();
+  if (!batch) return;
+  const res = await window.pywebview.api.restore(batch);
+  if (!res.ok) { toast(res.error, "error"); return; }
+  if (res.restored.length) {
+    redoStack.push(res.restored);
+    toast(`Restored ${res.restored.length} PDF${res.restored.length > 1 ? "s" : ""}`, "success");
+  }
+  (res.errors || []).forEach((err) => toast(err, "error"));
+  refreshLibrary();
+});
+
+$("btn-redo").addEventListener("click", async () => {
+  const batch = redoStack.pop();
+  if (!batch) return;
+  const res = await window.pywebview.api.delete(batch.map((e) => e.filename));
+  if (!res.ok) { toast(res.error, "error"); return; }
+  if (res.deleted.length) {
+    undoStack.push(res.deleted);
+    toast(`Deleted ${res.deleted.length} PDF${res.deleted.length > 1 ? "s" : ""} again`, "success");
+  }
+  (res.errors || []).forEach((err) => toast(err, "error"));
+  refreshLibrary();
 });
 
 $("btn-merge").addEventListener("click", async () => {

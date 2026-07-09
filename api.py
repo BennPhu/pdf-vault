@@ -159,6 +159,26 @@ class Api:
         subprocess.run(["open", str(pdf_core.library_dir())])
         return _ok()
 
+    def delete(self, filenames):
+        """Move PDFs to trash; returns the removed entries for undo."""
+        deleted, errors = [], []
+        for filename in filenames:
+            try:
+                deleted.append(pdf_core.delete_pdf(filename))
+            except PDFError as e:
+                errors.append(str(e))
+        return _ok(deleted=deleted, errors=errors)
+
+    def restore(self, entries):
+        """Undo deletions: move PDFs back from trash and re-index them."""
+        restored, errors = [], []
+        for entry in entries:
+            try:
+                restored.append(pdf_core.restore_pdf(entry))
+            except PDFError as e:
+                errors.append(str(e))
+        return _ok(restored=restored, errors=errors)
+
     # ------------------------------------------------------------- updates
 
     def check_updates(self):

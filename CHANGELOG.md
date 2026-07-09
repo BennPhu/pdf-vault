@@ -3,6 +3,17 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.2.0] - 2026-07-09
+
+### Added
+- Delete button: remove selected PDFs from the library (moved to a trash
+  folder, not permanently destroyed)
+- Undo / Redo buttons to reverse deletions back and forth
+
+### Fixed
+- Drag-and-drop now works on macOS: drops are handled natively on the Python
+  side, since WKWebView never exposes real file paths to JavaScript
+
 ## [1.1.0] - 2026-07-03
 
 Complete UI redesign: playful, modern web interface.

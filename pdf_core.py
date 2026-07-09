@@ -9,7 +9,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -98,6 +98,10 @@ def storage_dir():
 
 def library_dir():
     return storage_dir() / "library"
+
+
+def trash_dir():
+    return storage_dir() / ".trash"
 
 
 def index_file_path():
@@ -212,6 +216,38 @@ def add_pdf(source_path):
     index = load_index()
     index.append(entry)
     save_index(index)
+    return entry
+
+
+def delete_pdf(filename):
+    """Move a library PDF to the trash folder and drop it from the index.
+
+    Returns the removed index entry so the deletion can be undone.
+    """
+    path = library_path(filename)
+    index = load_index()
+    entry = next((e for e in index if e["filename"] == filename), None)
+    if entry is None:
+        raise PDFError(f"Not in the library index: {filename}")
+    if path.exists():
+        trash_dir().mkdir(parents=True, exist_ok=True)
+        shutil.move(str(path), str(trash_dir() / filename))
+    save_index([e for e in index if e["filename"] != filename])
+    return entry
+
+
+def restore_pdf(entry):
+    """Undo a delete: move the file back from trash and re-add its index entry."""
+    filename = entry["filename"]
+    trash_path = trash_dir() / filename
+    if not trash_path.exists():
+        raise PDFError(f"Cannot restore (no longer in trash): {filename}")
+    ensure_dirs()
+    shutil.move(str(trash_path), str(library_dir() / filename))
+    index = load_index()
+    if not any(e["filename"] == filename for e in index):
+        index.append(entry)
+        save_index(index)
     return entry
 
 

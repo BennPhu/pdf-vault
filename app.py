@@ -4,10 +4,12 @@ The UI lives in web/ (HTML/CSS/JS); Python logic is exposed via api.Api.
 The legacy tkinter UI is kept in app_tk.py for one release as a fallback.
 """
 
+import json
 import sys
 from pathlib import Path
 
 import webview
+from webview.dom import DOMEventHandler
 
 from api import Api
 from pdf_core import __version__
@@ -18,6 +20,28 @@ def web_dir():
     if getattr(sys, "frozen", False):
         return Path(sys._MEIPASS) / "web"
     return Path(__file__).resolve().parent / "web"
+
+
+def bind_drag_drop(window, api):
+    """Native drag & drop: file paths are only exposed on the Python side.
+
+    JS drop events cannot see real filesystem paths on macOS, so we handle
+    the drop here via pywebview's DOM API and push the result back to JS.
+    """
+
+    def on_drop(e):
+        files = e.get("dataTransfer", {}).get("files", [])
+        paths = [f["pywebviewFullPath"] for f in files if f.get("pywebviewFullPath")]
+        if not paths:
+            return
+        result = api.add_paths(paths)
+        window.evaluate_js(f"onNativeDrop({json.dumps(result)})")
+
+    def on_drag(e):
+        pass  # prevent_default is what matters here
+
+    window.dom.document.events.dragover += DOMEventHandler(on_drag, True, True)
+    window.dom.document.events.drop += DOMEventHandler(on_drop, True, True)
 
 
 def main():
@@ -31,7 +55,7 @@ def main():
         min_size=(820, 560),
     )
     api.set_window(window)
-    webview.start()
+    webview.start(bind_drag_drop, (window, api))
 
 
 if __name__ == "__main__":
