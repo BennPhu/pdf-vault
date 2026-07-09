@@ -45,14 +45,14 @@ def check_for_update():
     'notes' if a newer version exists, else None. Raises UpdateError on
     network failure so callers can stay silent when offline.
     """
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 (constant https URL)
         API_URL, headers={"Accept": "application/vnd.github+json",
                           "User-Agent": f"pdf-vault/{__version__}"})
     try:
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as resp:
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as resp:  # noqa: S310
             release = json.load(resp)
     except Exception as e:
-        raise UpdateError(f"Update check failed: {e}")
+        raise UpdateError(f"Update check failed: {e}") from e
 
     latest = _parse_version(release.get("tag_name", ""))
     current = _parse_version(__version__)
@@ -111,6 +111,54 @@ def _running_app_bundle():
     return None
 
 
+def _download_zip(update, dest_path):
+    """Stream the release zip to dest_path with a hard size bound."""
+    chunk_size = 1024 * 1024
+    max_chunks = MAX_DOWNLOAD_BYTES // chunk_size + 1  # provable loop bound
+    try:
+        # zip_url passed _url_allowed(): https + GitHub hosts only
+        request = urllib.request.Request(  # noqa: S310
+            update["zip_url"], headers={"User-Agent": f"pdf-vault/{__version__}"})
+        with urllib.request.urlopen(request, timeout=60) as resp, \
+                open(dest_path, "wb") as f:  # noqa: S310
+            for _ in range(max_chunks + 1):
+                chunk = resp.read(chunk_size)
+                if not chunk:
+                    return
+                if f.tell() + len(chunk) > MAX_DOWNLOAD_BYTES:
+                    raise UpdateError("Update download exceeds size limit — rejected.")
+                f.write(chunk)
+        raise UpdateError("Update download exceeds size limit — rejected.")
+    except UpdateError:
+        raise
+    except Exception as e:
+        raise UpdateError(f"Download failed: {e}") from e
+
+
+def _install_zip(zip_path, tmp_dir, app_bundle):
+    """Extract the verified zip and swap the running .app bundle."""
+    extract_dir = tmp_dir / "extracted"
+    with zipfile.ZipFile(zip_path) as zf:
+        _check_zip_safety(zf)
+        zf.extractall(extract_dir)
+    new_apps = list(extract_dir.glob("*.app"))
+    if not new_apps:
+        raise UpdateError("Release zip does not contain an .app bundle.")
+    new_app = new_apps[0]
+
+    backup = app_bundle.with_suffix(".app.old")
+    if backup.exists():
+        shutil.rmtree(backup)
+    app_bundle.rename(backup)
+    try:
+        shutil.move(str(new_app), str(app_bundle))
+    except Exception as e:
+        backup.rename(app_bundle)  # roll back
+        raise UpdateError(f"Install failed, rolled back: {e}") from e
+    shutil.rmtree(backup, ignore_errors=True)
+    return app_bundle
+
+
 def download_and_install(update, progress_cb=None):
     """Download the release zip, verify checksum, and install.
 
@@ -131,23 +179,7 @@ def download_and_install(update, progress_cb=None):
     report("Downloading update\u2026")
     tmp_dir = Path(tempfile.mkdtemp(prefix="pdf-vault-update-"))
     zip_path = tmp_dir / "update.zip"
-    try:
-        request = urllib.request.Request(
-            update["zip_url"], headers={"User-Agent": f"pdf-vault/{__version__}"})
-        with urllib.request.urlopen(request, timeout=60) as resp, open(zip_path, "wb") as f:
-            written = 0
-            while True:
-                chunk = resp.read(1024 * 1024)
-                if not chunk:
-                    break
-                written += len(chunk)
-                if written > MAX_DOWNLOAD_BYTES:
-                    raise UpdateError("Update download exceeds size limit — rejected.")
-                f.write(chunk)
-    except UpdateError:
-        raise
-    except Exception as e:
-        raise UpdateError(f"Download failed: {e}")
+    _download_zip(update, zip_path)
 
     report("Verifying checksum\u2026")
     digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
@@ -161,29 +193,10 @@ def download_and_install(update, progress_cb=None):
         return dest
 
     report("Installing\u2026")
-    extract_dir = tmp_dir / "extracted"
-    with zipfile.ZipFile(zip_path) as zf:
-        _check_zip_safety(zf)
-        zf.extractall(extract_dir)
-    new_apps = list(extract_dir.glob("*.app"))
-    if not new_apps:
-        raise UpdateError("Release zip does not contain an .app bundle.")
-    new_app = new_apps[0]
-
-    backup = app_bundle.with_suffix(".app.old")
-    if backup.exists():
-        shutil.rmtree(backup)
-    app_bundle.rename(backup)
-    try:
-        shutil.move(str(new_app), str(app_bundle))
-    except Exception as e:
-        backup.rename(app_bundle)  # roll back
-        raise UpdateError(f"Install failed, rolled back: {e}")
-    shutil.rmtree(backup, ignore_errors=True)
-    return app_bundle
+    return _install_zip(zip_path, tmp_dir, app_bundle)
 
 
 def relaunch(app_bundle):
     """Open the freshly installed app and exit this process."""
-    subprocess.Popen(["open", str(app_bundle)])
+    subprocess.Popen(["/usr/bin/open", str(app_bundle)])
     sys.exit(0)

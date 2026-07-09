@@ -119,9 +119,9 @@ def test_zip_safety_rejects_traversal(tmp_path):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("../outside.txt", "x")
-    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as zf:
-        with pytest.raises(UpdateError, match="Unsafe path"):
-            updater._check_zip_safety(zf)
+    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as zf, \
+            pytest.raises(UpdateError, match="Unsafe path"):
+        updater._check_zip_safety(zf)
 
 
 def test_zip_safety_rejects_bomb(monkeypatch):
@@ -129,9 +129,9 @@ def test_zip_safety_rejects_bomb(monkeypatch):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("big.bin", "x" * 100)
-    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as zf:
-        with pytest.raises(UpdateError, match="large"):
-            updater._check_zip_safety(zf)
+    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as zf, \
+            pytest.raises(UpdateError, match="large"):
+        updater._check_zip_safety(zf)
 
 
 def test_download_from_source_saves_to_downloads(monkeypatch, tmp_path):
@@ -147,7 +147,8 @@ def test_download_from_source_saves_to_downloads(monkeypatch, tmp_path):
     monkeypatch.setattr(updater.Path, "home", classmethod(lambda cls: tmp_path))
     (tmp_path / "Downloads").mkdir()
 
-    update = {"version": "99.0.0", "zip_url": "https://github.com/BennPhu/pdf-vault/releases/download/v99.0.0/x.zip", "sha256": digest}
+    update = {"version": "99.0.0", "sha256": digest,
+              "zip_url": "https://github.com/BennPhu/pdf-vault/releases/download/v99.0.0/x.zip"}
     result = updater.download_and_install(update)
     assert Path(result).exists()
     assert result.name == "PDF-Vault-99.0.0.zip"

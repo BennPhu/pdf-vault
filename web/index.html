@@ -26,7 +26,7 @@
 <section class="dropzone" id="dropzone">
   <div class="dropzone-inner">
     <span class="dropzone-icon">&#128229;</span>
-    <p><strong>Drop PDFs here</strong></p>
+    <p><strong>Drop PDFs or images here</strong></p>
     <p class="muted">or <button class="link-btn" id="btn-browse">click to browse</button></p>
   </div>
 </section>
@@ -35,6 +35,8 @@
   <section class="library-pane">
     <div class="pane-header">
       <h2>Library</h2>
+      <input type="search" id="search" class="search-box" placeholder="Search&hellip;"
+             autocomplete="off" spellcheck="false">
       <div class="pane-header-actions">
         <button class="btn ghost small" id="btn-select-all">Select All</button>
         <button class="btn ghost small" id="btn-unselect" hidden>Unselect</button>
@@ -71,6 +73,8 @@
   <button class="btn primary" id="btn-merge">Merge Selected</button>
   <button class="btn primary" id="btn-split">Split Selected</button>
   <button class="btn primary" id="btn-individual">Individual Splits</button>
+  <button class="btn primary" id="btn-edit">Edit Pages</button>
+  <button class="btn secondary" id="btn-compress">Compress</button>
   <button class="btn secondary" id="btn-master">Create Master PDF</button>
   <button class="btn ghost" id="btn-open-folder">Open Library Folder</button>
 </footer>
@@ -111,6 +115,30 @@
   </div>
 </div>
 
+<!-- Page editor modal -->
+<div class="modal-backdrop" id="edit-modal" hidden>
+  <div class="modal wide">
+    <h2 id="edit-title">Edit Pages</h2>
+    <div class="split-preview">
+      <img id="edit-img" alt="Page preview">
+    </div>
+    <div class="preview-nav">
+      <button class="btn round" id="edit-prev">&#9664;</button>
+      <span id="edit-page-label" class="page-chip"></span>
+      <button class="btn round" id="edit-next">&#9654;</button>
+    </div>
+    <div class="modal-actions edit-ops">
+      <button class="btn secondary" id="edit-rotate" title="Rotate this page 90&deg; clockwise">&#8635; Rotate</button>
+      <button class="btn secondary" id="edit-move-left" title="Move this page earlier">&#8676; Move</button>
+      <button class="btn secondary" id="edit-move-right" title="Move this page later">Move &#8677;</button>
+      <button class="btn danger" id="edit-delete-page" title="Delete this page">&#10005; Delete Page</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn primary" id="edit-done">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- Activity log & stats modal -->
 <div class="modal-backdrop" id="activity-modal" hidden>
   <div class="modal wide activity-modal">
@@ -119,6 +147,15 @@
     <p class="muted storage-path" id="stats-storage"></p>
     <h3>Recent Activity</h3>
     <div class="log-list" id="log-list"></div>
+    <div id="dev-panel" hidden>
+      <h3>Developer <span class="muted">(local only &mdash; PDFVAULT_DEV=1)</span></h3>
+      <pre class="dev-info" id="dev-info"></pre>
+      <div class="modal-actions">
+        <button class="btn ghost small" id="dev-copy-log">Copy Log</button>
+        <button class="btn ghost small" id="dev-rebuild-thumbs">Rebuild Thumbnails</button>
+        <button class="btn ghost small" id="dev-sync">Sync Index Now</button>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn ghost" id="activity-refresh">Refresh</button>
       <button class="btn primary" id="activity-close">Close</button>

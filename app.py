@@ -3,6 +3,7 @@
 The UI lives in web/ (HTML/CSS/JS); Python logic is exposed via api.Api.
 """
 
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -35,11 +36,10 @@ def bind_drag_drop(window, api):
         if not paths:
             return
         result = api.add_paths(paths)
-        try:
+        # JS fallback in app.js refreshes the library on drop anyway
+        with contextlib.suppress(Exception):
             window.evaluate_js(
                 f"window.onNativeDrop && window.onNativeDrop({json.dumps(result)})")
-        except Exception:
-            pass  # JS fallback in app.js refreshes the library on drop anyway
 
     def on_drag(e):
         pass  # prevent_default is what matters here

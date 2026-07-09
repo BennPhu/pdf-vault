@@ -121,6 +121,37 @@ body {
 
 .pane-header-actions { display: flex; gap: 6px; }
 
+.search-box {
+  flex: 1;
+  max-width: 220px;
+  margin: 0 10px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink, #333);
+  background: var(--bg, #fff);
+  border: 1.5px solid rgba(0, 0, 0, 0.14);
+  border-radius: 999px;
+  outline: none;
+}
+.search-box:focus { border-color: var(--accent, #E07A5F); }
+
+.no-results { grid-column: 1 / -1; text-align: center; padding: 24px 0; }
+
+.edit-ops { flex-wrap: wrap; }
+.edit-ops .btn:disabled { opacity: 0.4; cursor: default; }
+
+.dev-info {
+  max-height: 180px;
+  overflow: auto;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  padding: 10px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .pane-header h2 { font-size: 15px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 
 /* ------------------------------------------------------------ card grid */

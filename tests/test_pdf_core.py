@@ -1,4 +1,6 @@
 import json
+import os
+import time
 
 import pytest
 from pypdf import PdfReader, PdfWriter
@@ -180,6 +182,91 @@ def test_index_atomic_write(vault):
     assert pdf_core.load_index() == [{"filename": "x.pdf"}]
 
 
+# ------------------------------------------------------- rename & editing
+
+def test_rename_pdf(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "old.pdf", 2))
+    renamed = pdf_core.rename_pdf(entry["filename"], "new name")
+    assert renamed["filename"] == "new name.pdf"
+    assert pdf_core.library_path("new name.pdf").exists()
+    assert not pdf_core.library_path("old.pdf").exists()
+    assert any(e["filename"] == "new name.pdf" for e in pdf_core.load_index())
+
+
+def test_rename_sanitizes_and_avoids_clash(vault):
+    pdf_core.add_pdf(make_pdf(vault, "taken.pdf", 1))
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 1))
+    renamed = pdf_core.rename_pdf(entry["filename"], "../taken")
+    assert renamed["filename"] == "taken_1.pdf"  # traversal stripped, clash suffixed
+
+
+def test_rename_missing_file(vault):
+    with pytest.raises(PDFError, match="Not in the library"):
+        pdf_core.rename_pdf("ghost.pdf", "x")
+
+
+def test_rotate_page(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 2))
+    pdf_core.rotate_page(entry["filename"], 1, 90)
+    reader = PdfReader(str(pdf_core.library_path(entry["filename"])))
+    assert reader.pages[0].rotation == 90
+    assert reader.pages[1].rotation == 0
+
+
+def test_delete_page(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 3))
+    updated = pdf_core.delete_page(entry["filename"], 2)
+    assert updated["pages"] == 2
+
+
+def test_delete_last_page_refused(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 1))
+    with pytest.raises(PDFError, match="only page"):
+        pdf_core.delete_page(entry["filename"], 1)
+
+
+def test_move_page_bounds(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 3))
+    pdf_core.move_page(entry["filename"], 1, 1)  # ok: 1 -> 2
+    with pytest.raises(PDFError, match="Cannot move"):
+        pdf_core.move_page(entry["filename"], 1, -1)  # off the start
+
+
+def test_compress_pdf_valid_output(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 3))
+    result = pdf_core.compress_pdf(entry["filename"])
+    assert result["after"] <= result["before"]
+    # File must still be a readable PDF with the same page count
+    assert pdf_core.page_count(pdf_core.library_path(entry["filename"])) == 3
+
+
+def test_add_image_creates_pdf(vault):
+    img_path = vault / "photo.png"
+    pix = pdf_core.fitz.Pixmap(pdf_core.fitz.csRGB, pdf_core.fitz.IRect(0, 0, 40, 40))
+    pix.save(str(img_path))
+    entry = pdf_core.add_image(img_path)
+    assert entry["filename"] == "photo.pdf"
+    assert entry["pages"] == 1
+    assert pdf_core.page_count(pdf_core.library_path(entry["filename"])) == 1
+
+
+def test_add_image_rejects_unknown_type(vault):
+    bad = vault / "notes.txt"
+    bad.write_text("hello")
+    with pytest.raises(PDFError, match="Unsupported image type"):
+        pdf_core.add_image(bad)
+
+
+def test_add_any_dispatch(vault):
+    pdf_entry = pdf_core.add_any(make_pdf(vault, "doc.pdf", 1))
+    assert pdf_entry["filename"] == "doc.pdf"
+    img_path = vault / "scan.jpg"
+    pix = pdf_core.fitz.Pixmap(pdf_core.fitz.csRGB, pdf_core.fitz.IRect(0, 0, 20, 20))
+    pix.save(str(img_path))
+    img_entry = pdf_core.add_any(img_path)
+    assert img_entry["filename"] == "scan.pdf"
+
+
 # ------------------------------------------------------------- security
 
 @pytest.mark.parametrize("bad", [
@@ -232,8 +319,6 @@ def test_thumbnail_missing_file_returns_none(vault):
 # ----------------------------------------------------------- housekeeping
 
 def test_purge_trash_removes_old_files(vault):
-    import os
-    import time
     pdf_core.trash_dir().mkdir(parents=True, exist_ok=True)
     old = pdf_core.trash_dir() / "old.pdf"
     old.write_bytes(b"x")
@@ -261,6 +346,28 @@ def test_log_rotation(vault):
     pdf_core.log_event("test", "rotation trigger")
     assert log.with_suffix(".log.1").exists()
     assert log.stat().st_size < pdf_core.LOG_MAX_BYTES
+
+
+# ------------------------------------------------------------ dev mode
+
+def test_dev_mode_off_by_default(vault, monkeypatch):
+    monkeypatch.delenv("PDFVAULT_DEV", raising=False)
+    assert pdf_core.dev_mode() is False
+
+
+def test_dev_mode_env_gate(vault, monkeypatch):
+    monkeypatch.setenv("PDFVAULT_DEV", "1")
+    assert pdf_core.dev_mode() is True
+    info = pdf_core.dev_info()
+    assert info["storage_dir"] == str(pdf_core.storage_dir())
+    assert info["thumb_count"] == 0
+
+
+def test_dev_rebuild_thumbs(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 1))
+    pdf_core.get_thumbnail_b64(entry["filename"])
+    assert pdf_core.dev_rebuild_thumbs() == 1
+    assert list(pdf_core.thumbs_dir().glob("*.jpg")) == []
 
 
 def test_sync_index_survives_unreadable_folder(vault, monkeypatch):

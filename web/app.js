@@ -14,14 +14,21 @@ let splitPage = 1;
 let splitTotal = 1;
 let undoStack = [];        // batches of deleted index entries
 let redoStack = [];        // batches that can be re-deleted
+let searchQuery = "";      // live library filter
+let editFile = null;       // filename open in the page editor
+let editPage = 1;
+let editTotal = 1;
 
 /* ------------------------------------------------------------ bootstrap */
 
 window.addEventListener("pywebviewready", init);
 
+let devMode = false;
+
 async function init() {
   const state = await window.pywebview.api.get_state();
   $("version").textContent = "v" + state.version;
+  devMode = !!state.dev_mode;
   if (!state.configured) {
     $("setup-modal").hidden = false;
   }
@@ -45,15 +52,29 @@ async function refreshLibrary() {
   renderLibrary();
 }
 
+function visibleLibrary() {
+  if (!searchQuery) return library;
+  const q = searchQuery.toLowerCase();
+  return library.filter((e) => e.filename.toLowerCase().includes(q));
+}
+
 function renderLibrary() {
   const grid = $("library");
   grid.innerHTML = "";
+  const shown = visibleLibrary();
   $("empty-state").hidden = library.length > 0;
 
-  for (const entry of library) {
+  if (library.length > 0 && shown.length === 0) {
+    const none = document.createElement("p");
+    none.className = "muted no-results";
+    none.textContent = `No PDFs match \u201C${searchQuery}\u201D`;
+    grid.appendChild(none);
+  }
+
+  for (const entry of shown) {
     const card = document.createElement("div");
     card.className = "card" + (selected.has(entry.filename) ? " selected" : "");
-    card.title = entry.filename;
+    card.title = entry.filename + " (double-click name to rename)";
 
     const img = document.createElement("img");
     img.className = "card-thumb";
@@ -63,6 +84,10 @@ function renderLibrary() {
     const name = document.createElement("div");
     name.className = "card-name";
     name.textContent = entry.filename;
+    name.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      renameEntry(entry.filename);
+    });
     card.appendChild(name);
 
     const meta = document.createElement("div");
@@ -83,6 +108,28 @@ function renderLibrary() {
   $("btn-delete").hidden = selected.size === 0;
   $("btn-undo").hidden = undoStack.length === 0;
   $("btn-redo").hidden = redoStack.length === 0;
+}
+
+$("search").addEventListener("input", (e) => {
+  searchQuery = e.target.value.trim();
+  renderLibrary();
+});
+
+async function renameEntry(filename) {
+  const stem = filename.replace(/\.pdf$/i, "");
+  const input = prompt("Rename PDF:", stem);
+  if (input === null) return;
+  const newName = input.trim();
+  if (!newName || newName === stem) return;
+  const res = await window.pywebview.api.rename(filename, newName);
+  if (!res.ok) { toast(res.error, "error"); return; }
+  if (selected.has(filename)) {
+    selected.delete(filename);
+    selected.add(res.entry.filename);
+  }
+  if (previewFile === filename) previewFile = res.entry.filename;
+  toast(`Renamed to ${res.entry.filename}`, "success");
+  refreshLibrary();
 }
 
 function toggleSelect(filename) {
@@ -186,7 +233,7 @@ async function addPaths(paths) {
 function handleAddResult(res) {
   if (!res.ok) return; // cancelled
   if (res.added && res.added.length) {
-    toast(`Added ${res.added.length} PDF${res.added.length > 1 ? "s" : ""} to the vault`, "success");
+    toast(`Added ${res.added.length} file${res.added.length > 1 ? "s" : ""} to the vault`, "success");
   }
   (res.errors || []).forEach((err) => toast(err, "error"));
   refreshLibrary();
@@ -204,7 +251,12 @@ $("btn-select-all").addEventListener("click", () => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (!$("split-modal").hidden) closeSplitModal();
-    else unselectAll();
+    else if (!$("edit-modal").hidden) closeEditModal();
+    else if (searchQuery) {
+      $("search").value = "";
+      searchQuery = "";
+      renderLibrary();
+    } else unselectAll();
   }
 });
 
@@ -268,6 +320,76 @@ $("btn-master").addEventListener("click", async () => {
 });
 
 $("btn-open-folder").addEventListener("click", () => window.pywebview.api.open_library_folder());
+
+$("btn-compress").addEventListener("click", async () => {
+  if (selected.size === 0) { toast("Select PDFs to compress first", "error"); return; }
+  toast("Compressing\u2026");
+  const res = await window.pywebview.api.compress([...selected]);
+  if (!res.ok) { toast(res.error, "error"); return; }
+  (res.errors || []).forEach((err) => toast(err, "error"));
+  const savedMB = (res.before - res.after) / 1048576;
+  if (savedMB > 0.005) {
+    toast(`Saved ${savedMB.toFixed(2)} MB (a copy of the originals is kept in trash)`, "success");
+    celebrate();
+  } else {
+    toast("Already optimal \u2014 nothing to shrink", "success");
+  }
+  refreshLibrary();
+});
+
+/* ----------------------------------------------------------- page editor */
+
+$("btn-edit").addEventListener("click", async () => {
+  const filename = selectedOne();
+  if (!filename) return;
+  const entry = library.find((x) => x.filename === filename);
+  editFile = filename;
+  editTotal = entry ? entry.pages : 1;
+  $("edit-title").textContent = `Edit Pages \u2014 ${filename}`;
+  $("edit-modal").hidden = false;
+  await showEditPage(1);
+});
+
+async function showEditPage(page) {
+  const res = await window.pywebview.api.render_page(editFile, page);
+  if (!res.ok) { toast(res.error, "error"); return; }
+  editPage = res.page;
+  editTotal = res.total;
+  $("edit-img").src = "data:image/jpeg;base64," + res.image;
+  $("edit-page-label").textContent = `${editPage} / ${editTotal}`;
+  $("edit-delete-page").disabled = editTotal <= 1;
+  $("edit-move-left").disabled = editPage <= 1;
+  $("edit-move-right").disabled = editPage >= editTotal;
+}
+
+$("edit-prev").addEventListener("click", () => { if (editPage > 1) showEditPage(editPage - 1); });
+$("edit-next").addEventListener("click", () => { if (editPage < editTotal) showEditPage(editPage + 1); });
+
+async function editOp(promise, followPage) {
+  const res = await promise;
+  if (!res.ok) { toast(res.error, "error"); return; }
+  editTotal = res.entry.pages;
+  await showEditPage(Math.min(followPage, editTotal));
+}
+
+$("edit-rotate").addEventListener("click", () =>
+  editOp(window.pywebview.api.rotate_page(editFile, editPage), editPage));
+$("edit-delete-page").addEventListener("click", () => {
+  if (!confirm(`Delete page ${editPage} of ${editTotal}?`)) return;
+  editOp(window.pywebview.api.delete_page(editFile, editPage), editPage);
+});
+$("edit-move-left").addEventListener("click", () =>
+  editOp(window.pywebview.api.move_page(editFile, editPage, -1), editPage - 1));
+$("edit-move-right").addEventListener("click", () =>
+  editOp(window.pywebview.api.move_page(editFile, editPage, 1), editPage + 1));
+
+function closeEditModal() {
+  $("edit-modal").hidden = true;
+  editFile = null;
+  refreshLibrary();
+  if (previewFile) showPreview(previewFile, 1);
+}
+$("edit-done").addEventListener("click", closeEditModal);
 
 /* ---------------------------------------------------------- split modal */
 
@@ -346,6 +468,7 @@ function fmtUptime(sec) {
 async function openActivityModal() {
   $("activity-modal").hidden = false;
   await refreshActivity();
+  await refreshDevPanel();
 }
 
 async function refreshActivity() {
@@ -408,6 +531,40 @@ async function refreshActivity() {
 $("btn-activity").addEventListener("click", openActivityModal);
 $("activity-refresh").addEventListener("click", refreshActivity);
 $("activity-close").addEventListener("click", () => { $("activity-modal").hidden = true; });
+
+/* ------------------------------------------- developer panel (local only) */
+
+async function refreshDevPanel() {
+  $("dev-panel").hidden = !devMode;
+  if (!devMode) return;
+  const res = await window.pywebview.api.dev_info();
+  if (!res.ok) { $("dev-info").textContent = res.error; return; }
+  $("dev-info").textContent = JSON.stringify(res.info, null, 2);
+}
+
+$("dev-copy-log").addEventListener("click", async () => {
+  const res = await window.pywebview.api.get_activity();
+  if (!res.ok) { toast(res.error, "error"); return; }
+  const text = res.log.map((ev) => `${ev.time}  ${ev.action}  ${ev.detail}`).join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Log copied to clipboard", "success");
+  } catch (_) {
+    toast("Clipboard unavailable", "error");
+  }
+});
+
+$("dev-rebuild-thumbs").addEventListener("click", async () => {
+  const res = await window.pywebview.api.dev_rebuild_thumbs();
+  toast(res.ok ? res.message : res.error, res.ok ? "success" : "error");
+  if (res.ok) refreshLibrary();
+});
+
+$("dev-sync").addEventListener("click", async () => {
+  const res = await window.pywebview.api.dev_sync_now();
+  toast(res.ok ? res.message : res.error, res.ok ? "success" : "error");
+  if (res.ok) { refreshLibrary(); refreshActivity(); }
+});
 
 /* ------------------------------------------------------ storage / setup */
 

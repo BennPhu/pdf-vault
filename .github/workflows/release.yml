@@ -38,10 +38,19 @@ jobs:
         with:
           files: ${{ steps.checksum.outputs.zip }}
           body: |
-            PDF Vault ${{ github.ref_name }}
+            ## PDF Vault ${{ github.ref_name }}
 
-            Download the zip below, unzip, and drag "PDF Vault.app" to Applications.
-            First launch: right-click the app and choose "Open" (unsigned build).
+            ### Install (2 minutes)
+            1. Download the `.zip` below and unzip it
+            2. Drag **PDF Vault.app** into your **Applications** folder
+            3. First launch only: **right-click the app → Open → Open**
+               (the build is unsigned; the app is fully open source — see SECURITY.md)
 
+            Already have PDF Vault? It will offer this update automatically.
+
+            ### Verify your download (optional)
+            ```
+            shasum -a 256 PDF-Vault-*-macos.zip
+            ```
             SHA256: ${{ steps.checksum.outputs.sha }}
           generate_release_notes: true

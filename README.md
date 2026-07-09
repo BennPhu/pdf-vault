@@ -1,55 +1,79 @@
 # PDF Vault
 
-A local drag-and-drop desktop app for collecting PDFs. Drop PDFs into the window and they are:
+A tiny, fast, **100% local** PDF library for macOS. Drop PDFs (or images) in,
+and organize, preview, merge, split, edit, and compress them — no accounts,
+no cloud, no telemetry.
 
-1. Copied into a `library/` folder inside your chosen storage location
-2. Recorded in `index.json` (filename, date added, page count, size)
+<p align="center"><img src="web/logo.png" width="120" alt="PDF Vault logo"></p>
 
-Features:
+## Features
 
-- **Visual preview panel** — click a PDF in the library to see its rendered pages, with ◀/▶ page navigation
-- **Merge** — combine selected PDFs into one new file, saved wherever you choose
-- **Split Selected** — dialog with live page preview; pick pages x to y and save them as *one new PDF* wherever you choose
-- **Individual Splits** — dialog with live page preview; pick a page range and write *each page as its own one-page PDF* into a folder you choose
-- **Create Master PDF…** — combines your whole library into one PDF, only when you ask for it, saved wherever you choose (nothing is generated automatically)
-- **Unselect** button (or press `Escape`) to clear the selection and preview
-- **Storage folder setup** — on first launch you pick where PDF Vault stores its files; change it anytime via *Change Storage Folder…* (setting saved in `~/.pdf_vault_config.json`)
+- **Library with live search** — drop files in, find them instantly, double-click a name to rename
+- **Preview** — click any PDF to flip through its pages
+- **Merge / Split** — combine selected PDFs, extract page ranges, or split every page to its own file
+- **Edit pages** — rotate, delete, or reorder pages inside any PDF
+- **Compress** — shrink bloated or scanned PDFs in place (original kept in trash for undo)
+- **Images → PDF** — drop PNG/JPEG/WebP files and they become PDFs in your library
+- **Delete with undo/redo** — trashed files auto-purge after 30 days
+- **Master PDF** — bind your entire library into one document on demand
+- **Activity & stats** — see exactly what the app has done and what it uses
 
-Everything runs fully locally. The only network call is the optional update check against GitHub Releases (see `SECURITY.md`).
+## Privacy
 
-## Install (users)
+Everything runs on your machine. The only network request PDF Vault ever
+makes is an HTTPS update check against GitHub Releases — and updates install
+only after SHA-256 verification. Details in [SECURITY.md](SECURITY.md).
+
+## Install
 
 1. Download the latest `PDF-Vault-*-macos.zip` from [Releases](https://github.com/BennPhu/pdf-vault/releases).
-2. Unzip and drag **PDF Vault.app** to Applications.
-3. First launch: right-click the app → **Open** (the build is unsigned).
-4. The app offers updates automatically when a new version is released.
+2. Unzip and drag **PDF Vault.app** into Applications.
+3. First launch: **right-click the app → Open** (one time only).
 
-## Install (developers)
+> **Why the right-click?** The build is currently unsigned — signing requires
+> a paid Apple Developer account. The app is open source, so you can audit
+> exactly what it does, or build it yourself below. Release zips ship with a
+> SHA-256 checksum in the release notes.
+
+If macOS asks for permission to access your storage folder (Documents/Desktop),
+click **Allow** — PDF Vault only ever touches the folder you chose.
+
+## Build from source
 
 ```bash
+git clone https://github.com/BennPhu/pdf-vault.git
 cd pdf-vault
 python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python app.py        # run the app
 ```
 
-## Run
+To produce the .app bundle: `pip install -r requirements-dev.txt && ./build.sh`
 
-Double-click **`PDF Vault.command`** in Finder (it creates the venv and installs dependencies automatically on first use).
-
-Or from a terminal:
+## Development
 
 ```bash
-.venv/bin/python app.py
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/ruff check .         # lint — zero-warning policy
+.venv/bin/pytest tests/ -v     # test suite
 ```
 
-- On first launch, choose the folder where PDF Vault should store your files.
-- Drag PDFs onto the drop zone (or click **+ Add PDFs** to use a file picker).
-- Click a library entry to preview it; select entries and use **Merge Selected** or **Split Selected**.
-- **Create Master PDF…** builds the combined library PDF on demand; **Open Library Folder** opens the storage folder.
+The codebase follows an adaptation of NASA/JPL's
+[Power of 10](https://en.wikipedia.org/wiki/The_Power_of_10:_Rules_for_Developing_Safety-Critical_Code)
+rules, enforced by `tests/test_power_of_10.py` (no recursion, bounded loops,
+functions ≤ 60 lines, no dynamic code execution).
 
-## Notes
+## Project layout
 
-- If drag-and-drop doesn't work on your system (tkinterdnd2 issue), the app falls back automatically and the **+ Add PDFs** button provides the same functionality.
-- Known issue: `tkinterdnd2` ships a Tcl 9 binary for macOS arm64 which fails on Tk 8.6 ("incompatible stubs mechanism"). Fix applied here: the Tk 8.6-compatible `tkdnd` binary from the `tkinterdnd2-universal` package was copied into `.venv/.../tkinterdnd2/tkdnd/osx-arm64/`. If you rebuild the venv, repeat that step or just use the file-picker fallback.
-- Your PDFs live in the storage folder you chose (default `pdf-vault/data/`). Delete `~/.pdf_vault_config.json` to re-run the first-launch setup.
+| Path | Purpose |
+|---|---|
+| `app.py` | pywebview entrypoint + native drag-and-drop |
+| `api.py` | JS ↔ Python bridge (every method returns `{ok, ...}`) |
+| `pdf_core.py` | All PDF/library logic and storage housekeeping |
+| `updater.py` | Checksum-verified auto-updater (GitHub Releases) |
+| `web/` | The UI — plain HTML/CSS/JS, no frameworks |
+| `tests/` | pytest suite incl. security & Power-of-10 enforcement |
+
+## License
+
+MIT — see [LICENSE](LICENSE).

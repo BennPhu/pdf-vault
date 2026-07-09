@@ -37,9 +37,29 @@ How to ship an update to users (the auto-updater picks it up automatically).
    git checkout --orphan public && git add -A && git commit -m "PDF Vault v1.4.0"
    git branch -M public main && git push -f origin main
    ```
-2. **Remove internal notes:** delete or trim `PROGRESS.md`.
-3. **Verify ignores:** `data/`, `dist/`, `build/`, `.venv/` must stay untracked.
-4. **Confirm LICENSE** (MIT) and that `SECURITY.md` reflects the current design.
+2. **Verify ignores:** `data/`, `dist/`, `build/`, `.venv/` must stay untracked.
+3. **Confirm LICENSE** (MIT) and that `SECURITY.md` reflects the current design.
+
+## Your free "admin dashboard" (GitHub stats)
+
+No telemetry needed — GitHub already tracks everything relevant:
+
+- **Downloads per release:** each release page shows asset download counts, or
+  query `https://api.github.com/repos/BennPhu/pdf-vault/releases` (see
+  `assets[].download_count`).
+- **Traffic** (unique visitors, clones, referrers): repo → **Insights → Traffic**.
+- **Stars/watchers/issues:** the repo home page; enable notification emails for
+  new issues to hear about bugs.
+
+## Homebrew cask (optional distribution channel)
+
+`Casks/pdf-vault.rb` is a template. One-time setup: create a public repo named
+`homebrew-tap`, copy the cask file into `Casks/` there. Each release, update
+its `version` and `sha256`. Users install with:
+
+```bash
+brew tap BennPhu/tap && brew install --cask pdf-vault
+```
 
 ## Manual build (optional)
 

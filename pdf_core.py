@@ -1,11 +1,13 @@
 """Core PDF logic for PDF Vault: config, add/append, merge, split, and index management."""
 
 import base64
+import contextlib
 import json
 import os
 import resource
 import shutil
 import subprocess
+import sys
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +15,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.4.2"
+__version__ = "1.5.0"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -23,6 +25,10 @@ CONFIG_FILE = Path.home() / ".pdf_vault_config.json"
 # Security limits for untrusted PDF input
 MAX_FILE_SIZE_MB = 500
 MAX_PAGES = 10000
+MAX_ADD_BATCH = 100  # bound on files accepted per drop/dialog
+
+# Image types accepted for image -> PDF conversion
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 
 # Storage housekeeping
 TRASH_RETENTION_DAYS = 30
@@ -81,12 +87,59 @@ def _dir_size(path):
     return total
 
 
+def dev_mode():
+    """Local-only developer mode; enabled by launching with PDFVAULT_DEV=1.
+
+    Never toggleable from the UI and never transmits anything anywhere —
+    it only unlocks extra diagnostics in the Activity panel.
+    """
+    return os.environ.get("PDFVAULT_DEV") == "1"
+
+
+def dev_info():
+    """Extra local diagnostics for the developer panel."""
+    tdir = thumbs_dir()
+    thumbs = list(tdir.glob("*.jpg")) if tdir.is_dir() else []
+    log_path = log_file_path()
+    try:
+        log_bytes = log_path.stat().st_size if log_path.exists() else 0
+    except OSError:
+        log_bytes = 0
+    return {
+        "config": load_config(),
+        "config_file": str(CONFIG_FILE),
+        "storage_dir": str(storage_dir()),
+        "library_dir": str(library_dir()),
+        "trash_dir": str(trash_dir()),
+        "thumbs_dir": str(tdir),
+        "thumb_count": len(thumbs),
+        "thumb_kb": round(sum(t.stat().st_size for t in thumbs) / 1024, 1),
+        "log_file": str(log_path),
+        "log_kb": round(log_bytes / 1024, 1),
+        "frozen": bool(getattr(sys, "frozen", False)),
+        "python": sys.version.split()[0],
+    }
+
+
+def dev_rebuild_thumbs():
+    """Drop every cached thumbnail; they regenerate on next library load."""
+    tdir = thumbs_dir()
+    removed = 0
+    if tdir.is_dir():
+        for thumb in tdir.glob("*.jpg"):
+            with contextlib.suppress(OSError):
+                thumb.unlink()
+                removed += 1
+    log_event("dev", f"thumbnail cache cleared ({removed} files)")
+    return removed
+
+
 def _current_rss_mb():
     """Current resident memory in MB (peak != current; ask ps)."""
     try:
         out = subprocess.run(
-            ["ps", "-o", "rss=", "-p", str(os.getpid())],
-            capture_output=True, text=True, timeout=5)
+            ["/bin/ps", "-o", "rss=", "-p", str(os.getpid())],
+            capture_output=True, text=True, timeout=5, check=False)
         return round(int(out.stdout.strip()) / 1024, 1)  # ps reports KB
     except (ValueError, OSError, subprocess.SubprocessError):
         return None
@@ -155,7 +208,8 @@ def _validate_config(cfg):
 
 def load_config():
     """Load config from disk (cached). Returns dict or empty dict if unset."""
-    global _config
+    # Module-level cache: read once per process, patched directly in tests.
+    global _config  # noqa: PLW0603
     if _config is None:
         if CONFIG_FILE.exists():
             try:
@@ -343,7 +397,8 @@ def _validate_pdf(path):
             try:
                 reader.decrypt("")
             except Exception:
-                raise PDFError(f"PDF is password-protected: {path.name}")
+                raise PDFError(
+                    f"PDF is password-protected: {path.name}") from None
         if len(reader.pages) > MAX_PAGES:
             raise PDFError(
                 f"Too many pages ({len(reader.pages)} > {MAX_PAGES} limit): {path.name}")
@@ -351,18 +406,20 @@ def _validate_pdf(path):
     except PDFError:
         raise
     except Exception as e:
-        raise PDFError(f"Cannot read PDF '{path.name}': {e}")
+        raise PDFError(f"Cannot read PDF '{path.name}': {e}") from e
 
 
 def _unique_dest(directory, filename):
     """Return a destination path in directory, renaming on clashes."""
     dest = directory / filename
+    if not dest.exists():
+        return dest
     stem, suffix = dest.stem, dest.suffix
-    counter = 1
-    while dest.exists():
+    for counter in range(1, 100000):  # bounded (P10 rule 2)
         dest = directory / f"{stem}_{counter}{suffix}"
-        counter += 1
-    return dest
+        if not dest.exists():
+            return dest
+    raise PDFError(f"Too many name clashes for '{filename}'.")
 
 
 def add_pdf(source_path):
@@ -423,6 +480,203 @@ def restore_pdf(entry):
         save_index(index)
     log_event("restore", f"{filename} <- trash")
     return entry
+
+
+def rename_pdf(old_name, new_name):
+    """Rename a library PDF; returns the updated index entry."""
+    src = library_path(old_name)
+    if not src.exists():
+        raise PDFError(f"Not in the library: {old_name}")
+    cleaned = sanitize_filename(new_name)
+    if cleaned == old_name:
+        entry = next((e for e in load_index() if e["filename"] == old_name), None)
+        if entry is None:
+            raise PDFError(f"Not in the library index: {old_name}")
+        return entry
+    dest = _unique_dest(library_dir(), cleaned)
+    src.rename(dest)
+    index = load_index()
+    entry = next((e for e in index if e["filename"] == old_name), None)
+    if entry is None:  # index out of sync — self-heal with a fresh entry
+        entry = {
+            "filename": dest.name,
+            "added": datetime.now().isoformat(timespec="seconds"),
+            "pages": page_count(dest),
+            "size_bytes": dest.stat().st_size,
+        }
+        index.append(entry)
+    else:
+        entry["filename"] = dest.name
+    save_index(index)
+    for thumb in thumbs_dir().glob(f"{old_name}.*.jpg"):
+        thumb.unlink(missing_ok=True)
+    log_event("rename", f"{old_name} -> {dest.name}")
+    return entry
+
+
+def _atomic_pdf_replace(path, writer):
+    """Write a PdfWriter to path atomically (temp file + replace)."""
+    tmp = path.with_suffix(".pdf.tmp")
+    try:
+        with open(tmp, "wb") as f:
+            writer.write(f)
+        tmp.replace(path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def _refresh_entry(filename):
+    """Re-read pages/size for a rewritten library file; returns the entry."""
+    path = library_path(filename)
+    reader = _validate_pdf(path)
+    index = load_index()
+    entry = next((e for e in index if e["filename"] == filename), None)
+    if entry is None:
+        raise PDFError(f"Not in the library index: {filename}")
+    entry["pages"] = len(reader.pages)
+    entry["size_bytes"] = path.stat().st_size
+    save_index(index)
+    return entry
+
+
+def rotate_page(filename, page_number, degrees=90):
+    """Rotate one page (1-based) by a multiple of 90 degrees, in place."""
+    if degrees % 90 != 0:
+        raise PDFError("Rotation must be a multiple of 90 degrees.")
+    path = library_path(filename)
+    reader = _validate_pdf(path)
+    total = len(reader.pages)
+    if not (1 <= page_number <= total):
+        raise PDFError(f"Page {page_number} out of range (1-{total}).")
+    writer = PdfWriter()
+    for i in range(total):
+        page = reader.pages[i]
+        if i == page_number - 1:
+            page.rotate(degrees)
+        writer.add_page(page)
+    _atomic_pdf_replace(path, writer)
+    entry = _refresh_entry(filename)
+    log_event("edit", f"{filename}: rotated page {page_number} by {degrees}°")
+    return entry
+
+
+def delete_page(filename, page_number):
+    """Remove one page (1-based) from a library PDF, in place."""
+    path = library_path(filename)
+    reader = _validate_pdf(path)
+    total = len(reader.pages)
+    if not (1 <= page_number <= total):
+        raise PDFError(f"Page {page_number} out of range (1-{total}).")
+    if total == 1:
+        raise PDFError("Cannot delete the only page of a PDF.")
+    writer = PdfWriter()
+    for i in range(total):
+        if i != page_number - 1:
+            writer.add_page(reader.pages[i])
+    _atomic_pdf_replace(path, writer)
+    entry = _refresh_entry(filename)
+    log_event("edit", f"{filename}: deleted page {page_number}")
+    return entry
+
+
+def move_page(filename, page_number, direction):
+    """Swap a page (1-based) with its neighbor; direction is -1 or +1."""
+    if direction not in (-1, 1):
+        raise PDFError("Direction must be -1 (earlier) or +1 (later).")
+    path = library_path(filename)
+    reader = _validate_pdf(path)
+    total = len(reader.pages)
+    target = page_number + direction
+    if not (1 <= page_number <= total) or not (1 <= target <= total):
+        raise PDFError(f"Cannot move page {page_number} to position {target}.")
+    order = list(range(total))
+    order[page_number - 1], order[target - 1] = order[target - 1], order[page_number - 1]
+    writer = PdfWriter()
+    for i in order:
+        writer.add_page(reader.pages[i])
+    _atomic_pdf_replace(path, writer)
+    entry = _refresh_entry(filename)
+    log_event("edit", f"{filename}: moved page {page_number} to {target}")
+    return entry
+
+
+def compress_pdf(filename):
+    """Rewrite a library PDF with PyMuPDF's optimizations, in place.
+
+    Keeps a pre-compression copy in the trash for undo. Returns a dict
+    with before/after sizes in bytes.
+    """
+    path = library_path(filename)
+    _validate_pdf(path)
+    before = path.stat().st_size
+    tmp = path.with_suffix(".pdf.tmp")
+    try:
+        with fitz.open(str(path)) as doc:
+            doc.save(str(tmp), garbage=4, deflate=True, clean=True)
+    except Exception as e:
+        tmp.unlink(missing_ok=True)
+        raise PDFError(f"Cannot compress '{filename}': {e}") from e
+    after = tmp.stat().st_size
+    if after >= before:
+        tmp.unlink(missing_ok=True)
+        log_event("compress", f"{filename}: already optimal")
+        return {"filename": filename, "before": before, "after": before}
+    trash_dir().mkdir(parents=True, exist_ok=True)
+    shutil.copy2(path, _unique_dest(trash_dir(), filename))
+    tmp.replace(path)
+    _refresh_entry(filename)
+    log_event("compress",
+              f"{filename}: {before / 1048576:.2f} MB -> {after / 1048576:.2f} MB")
+    return {"filename": filename, "before": before, "after": after}
+
+
+def add_image(source_path):
+    """Convert an image file to a 1-page PDF and add it to the library."""
+    src = Path(source_path)
+    if not src.exists():
+        raise PDFError(f"File not found: {src}")
+    if src.is_symlink():
+        raise PDFError(f"Symlinks are not allowed: {src.name}")
+    if not src.is_file():
+        raise PDFError(f"Not a regular file: {src.name}")
+    if src.suffix.lower() not in IMAGE_EXTS:
+        raise PDFError(f"Unsupported image type: {src.name}")
+    size_mb = src.stat().st_size / (1024 * 1024)
+    if size_mb > MAX_FILE_SIZE_MB:
+        raise PDFError(
+            f"File too large ({size_mb:.0f} MB > {MAX_FILE_SIZE_MB} MB limit): {src.name}")
+    try:
+        with fitz.open(str(src)) as img:
+            pdf_bytes = img.convert_to_pdf()
+    except Exception as e:
+        raise PDFError(f"Cannot convert image '{src.name}': {e}") from e
+    ensure_dirs()
+    dest = _unique_dest(library_dir(), sanitize_filename(src.stem + ".pdf"))
+    dest.write_bytes(pdf_bytes)
+    try:
+        reader = _validate_pdf(dest)
+    except PDFError:
+        dest.unlink(missing_ok=True)
+        raise
+    entry = {
+        "filename": dest.name,
+        "added": datetime.now().isoformat(timespec="seconds"),
+        "pages": len(reader.pages),
+        "size_bytes": dest.stat().st_size,
+    }
+    index = load_index()
+    index.append(entry)
+    save_index(index)
+    log_event("add", f"{dest.name} (from image {src.name})")
+    return entry
+
+
+def add_any(source_path):
+    """Add a PDF or an image (converted to PDF) to the library."""
+    if Path(source_path).suffix.lower() in IMAGE_EXTS:
+        return add_image(source_path)
+    return add_pdf(source_path)
 
 
 def merge_pdfs(paths, output_path):
@@ -556,7 +810,7 @@ def render_page_b64(path, page_number=1, max_px=900):
     except PDFError:
         raise
     except Exception as e:
-        raise PDFError(f"Cannot render '{path.name}': {e}")
+        raise PDFError(f"Cannot render '{path.name}': {e}") from e
 
 
 def get_thumbnail_b64(filename, max_px=240):
@@ -630,7 +884,5 @@ def _prune_thumbs(valid_filenames):
         # thumb name: <filename>.<mtime>.jpg
         source = thumb.name.rsplit(".", 2)[0]
         if source not in valid_filenames:
-            try:
+            with contextlib.suppress(OSError):
                 thumb.unlink()
-            except OSError:
-                pass

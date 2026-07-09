@@ -1,0 +1,22 @@
+# Zero-warning policy (Power of 10, rule 10)
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "B",    # bugbear (likely bugs)
+    "S",    # bandit security checks
+    "PL",   # pylint subset
+    "RET",  # return-value consistency
+    "SIM",  # simplifiable code
+]
+ignore = [
+    "S603",    # subprocess call — inputs are fixed strings, reviewed per use
+    "PLR2004", # magic values in comparisons (page numbers, sizes)
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["S101", "PLR0913"]  # asserts are the point of tests

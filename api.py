@@ -4,6 +4,7 @@ Every public method returns a JSON-serializable dict:
 {"ok": True, ...} on success or {"ok": False, "error": "..."} on failure.
 """
 
+import subprocess
 from pathlib import Path
 
 import webview
@@ -37,6 +38,7 @@ class Api:
             configured=pdf_core.is_configured(),
             storage_dir=str(pdf_core.storage_dir()),
             folder_access=pdf_core.folder_access_ok(),
+            dev_mode=pdf_core.dev_mode(),
         )
 
     def choose_storage_dir(self):
@@ -67,24 +69,69 @@ class Api:
         return _ok(entries=entries)
 
     def add_pdfs_dialog(self):
-        """Native file picker, then add the chosen PDFs."""
+        """Native file picker, then add the chosen PDFs or images."""
         result = self._window.create_file_dialog(
             webview.OPEN_DIALOG, allow_multiple=True,
-            file_types=("PDF files (*.pdf)",))
+            file_types=("PDFs and images (*.pdf;*.png;*.jpg;*.jpeg;*.webp)",
+                        "PDF files (*.pdf)"))
         if not result:
             return _err("cancelled")
         return self.add_paths(list(result))
 
     def add_paths(self, paths):
-        """Add PDFs by absolute path (used by drag-and-drop and the picker)."""
+        """Add PDFs/images by absolute path (drag-and-drop and the picker)."""
         added, errors = [], []
+        if len(paths) > pdf_core.MAX_ADD_BATCH:
+            errors.append(f"Too many files at once (limit {pdf_core.MAX_ADD_BATCH}); "
+                          f"only the first {pdf_core.MAX_ADD_BATCH} were considered.")
+            paths = paths[:pdf_core.MAX_ADD_BATCH]
         for p in paths:
             try:
-                entry = pdf_core.add_pdf(p)
+                entry = pdf_core.add_any(p)
                 added.append(entry["filename"])
             except PDFError as e:
                 errors.append(str(e))
         return _ok(added=added, errors=errors)
+
+    def rename(self, filename, new_name):
+        """Rename a library PDF."""
+        try:
+            entry = pdf_core.rename_pdf(filename, new_name)
+            return _ok(entry=entry)
+        except PDFError as e:
+            return _err(e)
+
+    def rotate_page(self, filename, page_number):
+        try:
+            return _ok(entry=pdf_core.rotate_page(filename, int(page_number)))
+        except (PDFError, ValueError, TypeError) as e:
+            return _err(e)
+
+    def delete_page(self, filename, page_number):
+        try:
+            return _ok(entry=pdf_core.delete_page(filename, int(page_number)))
+        except (PDFError, ValueError, TypeError) as e:
+            return _err(e)
+
+    def move_page(self, filename, page_number, direction):
+        try:
+            return _ok(entry=pdf_core.move_page(
+                filename, int(page_number), int(direction)))
+        except (PDFError, ValueError, TypeError) as e:
+            return _err(e)
+
+    def compress(self, filenames):
+        """Compress the given library PDFs in place; reports bytes saved."""
+        before = after = 0
+        errors = []
+        for filename in filenames:
+            try:
+                result = pdf_core.compress_pdf(filename)
+                before += result["before"]
+                after += result["after"]
+            except PDFError as e:
+                errors.append(str(e))
+        return _ok(before=before, after=after, errors=errors)
 
     def render_page(self, filename, page_number):
         """Full-size render of a library PDF page for the preview panel."""
@@ -150,10 +197,29 @@ class Api:
         except PDFError as e:
             return _err(e)
 
+    # -------------------------------------------- developer mode (local only)
+
+    def dev_info(self):
+        """Diagnostics for the developer panel (PDFVAULT_DEV=1 only)."""
+        if not pdf_core.dev_mode():
+            return _err("Developer mode is not enabled.")
+        return _ok(info=pdf_core.dev_info())
+
+    def dev_rebuild_thumbs(self):
+        if not pdf_core.dev_mode():
+            return _err("Developer mode is not enabled.")
+        removed = pdf_core.dev_rebuild_thumbs()
+        return _ok(message=f"Cleared {removed} cached thumbnails")
+
+    def dev_sync_now(self):
+        if not pdf_core.dev_mode():
+            return _err("Developer mode is not enabled.")
+        entries = pdf_core.sync_index()
+        return _ok(message=f"Index synced ({len(entries)} files)")
+
     def open_library_folder(self):
-        import subprocess
         pdf_core.ensure_dirs()
-        subprocess.run(["open", str(pdf_core.library_dir())])
+        subprocess.run(["/usr/bin/open", str(pdf_core.library_dir())], check=False)
         return _ok()
 
     def delete(self, filenames):

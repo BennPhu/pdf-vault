@@ -3,6 +3,30 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.5.0] - 2026-07-09 — Features, Power of 10, Shippability
+
+### Added
+- Live library search (top of the library pane; Esc clears)
+- Rename PDFs (double-click a file's name)
+- Page editor: rotate, delete, and reorder pages inside any PDF
+- Compress PDFs in place (originals kept in trash for undo)
+- Images → PDF: drop PNG/JPEG/WebP files to convert them into the library
+- Local-only developer panel (launch with PDFVAULT_DEV=1): diagnostics,
+  log copy, thumbnail rebuild, manual index sync — no telemetry, ever
+
+### Code quality (NASA/JPL "Power of 10", adapted for Python)
+- No function exceeds 60 lines; no recursion; all loops provably bounded;
+  no dynamic code execution — enforced permanently by tests/test_power_of_10.py
+- ruff linting with a zero-warning policy, wired into CI
+- Batch add capped at 100 files per drop
+
+### Shipping & repo hygiene
+- README rewritten for end users (install, verify, build-from-source)
+- Friendlier release notes template with step-by-step install
+- Homebrew cask template (Casks/pdf-vault.rb) + tap instructions
+- GitHub-stats guide in RELEASING.md (downloads/traffic/stars — no telemetry)
+- Removed dead files: PDF Vault.command, PROGRESS.md, 2 unused images
+
 ## [1.4.2] - 2026-07-09
 
 ### Fixed
