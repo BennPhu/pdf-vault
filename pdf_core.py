@@ -15,7 +15,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.5.0"
+__version__ = "1.5.1"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -72,6 +72,23 @@ def log_event(action, detail=""):
 def get_log(limit=200):
     """Most recent events, newest first."""
     return list(_activity_log)[-limit:][::-1]
+
+
+def read_log_tail(max_lines=1000):
+    """Last max_lines of the persisted activity.log, newest first.
+
+    Bounded read: at most LOG_MAX_BYTES + one rotation generation.
+    Returns a list of raw text lines (already formatted by log_event).
+    """
+    lines = []
+    for path in (log_file_path().with_suffix(".log.1"), log_file_path()):
+        try:
+            if path.exists() and path.stat().st_size <= 2 * LOG_MAX_BYTES:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    lines.extend(f.read().splitlines())
+        except OSError:
+            continue
+    return lines[-max_lines:][::-1]
 
 
 def _dir_size(path):
@@ -151,15 +168,17 @@ def get_stats():
     # ru_maxrss is bytes on macOS
     peak_mb = usage.ru_maxrss / (1024 * 1024)
     memory_mb = _current_rss_mb()
-    lib, trash = library_dir(), trash_dir()
+    lib, trash, thumbs = library_dir(), trash_dir(), thumbs_dir()
     lib_files = list(lib.glob("*.pdf")) if lib.is_dir() else []
     trash_files = list(trash.glob("*.pdf")) if trash.is_dir() else []
+    thumb_files = list(thumbs.glob("*.jpg")) if thumbs.is_dir() else []
+    lib_bytes = _dir_size(lib)
+    trash_bytes = _dir_size(trash)
+    thumb_bytes = _dir_size(thumbs)
     try:
-        disk = shutil.disk_usage(str(storage_dir()))
-        disk_free_gb = disk.free / (1024 ** 3)
-        disk_total_gb = disk.total / (1024 ** 3)
+        log_bytes = log_file_path().stat().st_size if log_file_path().exists() else 0
     except OSError:
-        disk_free_gb = disk_total_gb = None
+        log_bytes = 0
     uptime = datetime.now() - _APP_START
     return {
         "version": __version__,
@@ -169,12 +188,15 @@ def get_stats():
         "cpu_seconds": round(usage.ru_utime + usage.ru_stime, 1),
         "storage_dir": str(storage_dir()),
         "library_files": len(lib_files),
-        "library_mb": round(_dir_size(lib) / (1024 * 1024), 2),
+        "library_mb": round(lib_bytes / (1024 * 1024), 2),
         "trash_files": len(trash_files),
-        "trash_mb": round(_dir_size(trash) / (1024 * 1024), 2),
+        "trash_mb": round(trash_bytes / (1024 * 1024), 2),
+        "thumb_files": len(thumb_files),
+        "thumbs_mb": round(thumb_bytes / (1024 * 1024), 2),
+        "log_kb": round(log_bytes / 1024, 1),
         "index_entries": len(load_index()),
-        "disk_free_gb": round(disk_free_gb, 1) if disk_free_gb is not None else None,
-        "disk_total_gb": round(disk_total_gb, 1) if disk_total_gb is not None else None,
+        "footprint_mb": round(
+            (lib_bytes + trash_bytes + thumb_bytes + log_bytes) / (1024 * 1024), 2),
         "log_events": len(_activity_log),
     }
 

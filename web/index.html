@@ -20,6 +20,7 @@
     <button class="btn ghost" id="btn-updates">Check for Updates</button>
     <button class="btn ghost" id="btn-storage" title="Change storage folder">&#9881; Storage</button>
     <button class="btn ghost" id="btn-activity" title="Program log &amp; stats">&#128202; Activity</button>
+    <button class="btn ghost" id="btn-info" title="How to use, mission &amp; terms">&#8505;&#65039; Info</button>
   </div>
 </header>
 
@@ -117,23 +118,25 @@
 
 <!-- Page editor modal -->
 <div class="modal-backdrop" id="edit-modal" hidden>
-  <div class="modal wide">
+  <div class="modal wide edit-modal">
     <h2 id="edit-title">Edit Pages</h2>
-    <div class="split-preview">
+    <div class="edit-preview-box">
       <img id="edit-img" alt="Page preview">
     </div>
-    <div class="preview-nav">
-      <button class="btn round" id="edit-prev">&#9664;</button>
-      <span id="edit-page-label" class="page-chip"></span>
-      <button class="btn round" id="edit-next">&#9654;</button>
+    <div class="edit-toolbar">
+      <div class="preview-nav">
+        <button class="btn round" id="edit-prev" title="Previous page">&#9664;</button>
+        <span id="edit-page-label" class="page-chip"></span>
+        <button class="btn round" id="edit-next" title="Next page">&#9654;</button>
+      </div>
+      <div class="edit-ops">
+        <button class="btn secondary" id="edit-rotate" title="Rotate this page 90&deg; clockwise">&#8635; Rotate</button>
+        <button class="btn secondary" id="edit-move-left" title="Move this page earlier">&#8676; Move</button>
+        <button class="btn secondary" id="edit-move-right" title="Move this page later">Move &#8677;</button>
+        <button class="btn danger" id="edit-delete-page" title="Delete this page">&#10005; Delete Page</button>
+      </div>
     </div>
-    <div class="modal-actions edit-ops">
-      <button class="btn secondary" id="edit-rotate" title="Rotate this page 90&deg; clockwise">&#8635; Rotate</button>
-      <button class="btn secondary" id="edit-move-left" title="Move this page earlier">&#8676; Move</button>
-      <button class="btn secondary" id="edit-move-right" title="Move this page later">Move &#8677;</button>
-      <button class="btn danger" id="edit-delete-page" title="Delete this page">&#10005; Delete Page</button>
-    </div>
-    <div class="modal-actions">
+    <div class="modal-actions edit-footer">
       <button class="btn primary" id="edit-done">Done</button>
     </div>
   </div>
@@ -145,7 +148,10 @@
     <h2>Activity &amp; Stats</h2>
     <div class="stats-grid" id="stats-grid"></div>
     <p class="muted storage-path" id="stats-storage"></p>
-    <h3>Recent Activity</h3>
+    <div class="log-header">
+      <h3>Recent Activity</h3>
+      <button class="btn ghost small" id="btn-full-log">Open Full Log</button>
+    </div>
     <div class="log-list" id="log-list"></div>
     <div id="dev-panel" hidden>
       <h3>Developer <span class="muted">(local only &mdash; PDFVAULT_DEV=1)</span></h3>
@@ -159,6 +165,67 @@
     <div class="modal-actions">
       <button class="btn ghost" id="activity-refresh">Refresh</button>
       <button class="btn primary" id="activity-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Full-window log overlay -->
+<div class="log-overlay" id="log-overlay" hidden>
+  <div class="log-overlay-header">
+    <button class="btn ghost" id="log-back">&#8592; Back</button>
+    <h2>Activity Log</h2>
+    <span class="muted" id="log-meta"></span>
+    <div class="log-overlay-actions">
+      <button class="btn ghost small" id="log-refresh">Refresh</button>
+      <button class="btn ghost small" id="log-copy">Copy Log</button>
+    </div>
+  </div>
+  <div class="log-overlay-body" id="log-overlay-body"></div>
+</div>
+
+<!-- Info modal: how to use, mission, terms -->
+<div class="modal-backdrop" id="info-modal" hidden>
+  <div class="modal wide info-modal">
+    <h2>&#8505;&#65039; Info</h2>
+    <div class="info-tabs">
+      <button class="info-tab active" data-tab="info-howto">How to Use</button>
+      <button class="info-tab" data-tab="info-mission">Mission</button>
+      <button class="info-tab" data-tab="info-terms">Terms</button>
+    </div>
+    <div class="info-body">
+      <div class="info-panel" id="info-howto">
+        <ul>
+          <li><strong>Add files</strong> &mdash; drop PDFs or images (PNG/JPEG/WebP) onto the drop zone, or click to browse. Images are converted to PDFs automatically.</li>
+          <li><strong>Search</strong> &mdash; type in the box atop the Library; press Esc to clear.</li>
+          <li><strong>Rename</strong> &mdash; double-click a file's name in the Library.</li>
+          <li><strong>Preview</strong> &mdash; click any PDF to flip through its pages on the right.</li>
+          <li><strong>Merge / Split</strong> &mdash; select files, then use the bottom bar: merge into one, save a page range, or split every page to its own file.</li>
+          <li><strong>Edit Pages</strong> &mdash; select one PDF to rotate, reorder, or delete pages.</li>
+          <li><strong>Compress</strong> &mdash; shrink selected PDFs in place; originals are kept in trash so you can undo.</li>
+          <li><strong>Delete &amp; Undo</strong> &mdash; deleted files go to a hidden trash for 30 days; use Undo/Redo in the Library header.</li>
+          <li><strong>Master PDF</strong> &mdash; bind your entire library into a single document.</li>
+          <li><strong>Storage</strong> &mdash; everything lives in the folder you chose; change it anytime via &#9881; Storage.</li>
+        </ul>
+      </div>
+      <div class="info-panel" id="info-mission" hidden>
+        <p><strong>PDF Vault exists so you never have to upload a document to "just merge two PDFs" again.</strong></p>
+        <p>Our mission is a light, fast PDF library that is <strong>100% local</strong>: your files never leave your machine, there are no accounts, no ads, no telemetry, and no cloud. The app is free and open source, so anyone can verify exactly what it does.</p>
+        <p>The only network request the app ever makes is an optional, checksum-verified update check against GitHub Releases.</p>
+      </div>
+      <div class="info-panel" id="info-terms" hidden>
+        <p><strong>License &amp; Agreement (MIT)</strong></p>
+        <ul>
+          <li>PDF Vault is free, open-source software under the MIT License.</li>
+          <li>It is provided <em>"as is", without warranty of any kind</em> &mdash; use it at your own risk and keep backups of important documents.</li>
+          <li>The authors are not liable for any damages or data loss arising from its use.</li>
+          <li><strong>Privacy:</strong> the app collects no data and sends no telemetry. All processing happens on your device. The sole network call is the optional update check (GitHub Releases, HTTPS, SHA-256 verified).</li>
+          <li>Source code, license text, and security policy: <em>github.com/BennPhu/pdf-vault</em></li>
+        </ul>
+        <p class="muted">By using PDF Vault you accept the MIT License terms above.</p>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn primary" id="info-close">Close</button>
     </div>
   </div>
 </div>

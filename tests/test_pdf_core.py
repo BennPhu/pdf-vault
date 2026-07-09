@@ -348,6 +348,35 @@ def test_log_rotation(vault):
     assert log.stat().st_size < pdf_core.LOG_MAX_BYTES
 
 
+def test_stats_are_program_only(vault):
+    pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 2))
+    stats = pdf_core.get_stats()
+    assert "disk_free_gb" not in stats
+    assert "disk_total_gb" not in stats
+    assert stats["library_files"] == 1
+    assert stats["footprint_mb"] >= stats["library_mb"]
+    assert "thumbs_mb" in stats and "log_kb" in stats
+
+
+def test_read_log_tail_newest_first(vault):
+    pdf_core.log_event("first", "one")
+    pdf_core.log_event("second", "two")
+    lines = pdf_core.read_log_tail()
+    assert len(lines) == 2
+    assert "second" in lines[0]
+    assert "first" in lines[1]
+
+
+def test_read_log_tail_bounded(vault):
+    for i in range(20):
+        pdf_core.log_event("event", str(i))
+    assert len(pdf_core.read_log_tail(max_lines=5)) == 5
+
+
+def test_read_log_tail_empty_when_no_log(vault):
+    assert pdf_core.read_log_tail() == []
+
+
 # ------------------------------------------------------------ dev mode
 
 def test_dev_mode_off_by_default(vault, monkeypatch):

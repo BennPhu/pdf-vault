@@ -3,6 +3,28 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.5.1] - 2026-07-09 — UI/UX Polish
+
+### Added
+- Full-window Activity Log view ("Open Full Log"): reads the persisted
+  activity.log history, monospace, with Back / Refresh / Copy Log
+- Info section (topbar): How to Use guide, project Mission, and MIT
+  License terms in a tabbed modal
+- Toast notifications now have a close (×) button and pause on hover
+
+### Changed
+- Toast duration scales with message length (~1s short, up to 4s long;
+  errors always ≥ 2.5s)
+- Activity stats are now program-only: removed whole-computer "Disk free";
+  added Thumbnail cache and Total footprint (library + trash + thumbs + log)
+
+### Fixed
+- Edit Pages modal no longer overflows off-screen: preview box sized like
+  the main Preview pane, nav + edit actions grouped in one boxed toolbar,
+  Done always visible (all modals now cap at 92% of window height)
+- Edit Pages "Delete Page" used a native confirm() dialog that is
+  unreliable under pywebview — replaced with an inline two-click confirm
+
 ## [1.5.0] - 2026-07-09 — Features, Power of 10, Shippability
 
 ### Added

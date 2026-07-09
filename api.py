@@ -252,6 +252,16 @@ class Api:
         except Exception as e:
             return _err(e)
 
+    def get_full_log(self):
+        """Persisted activity.log tail (newest first) for the full log view."""
+        try:
+            lines = pdf_core.read_log_tail()
+            log_path = pdf_core.log_file_path()
+            size_kb = round(log_path.stat().st_size / 1024, 1) if log_path.exists() else 0
+            return _ok(lines=lines, size_kb=size_kb, path=str(log_path))
+        except Exception as e:
+            return _err(e)
+
     # ------------------------------------------------------------- updates
 
     def check_updates(self):

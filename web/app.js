@@ -368,14 +368,30 @@ $("edit-next").addEventListener("click", () => { if (editPage < editTotal) showE
 async function editOp(promise, followPage) {
   const res = await promise;
   if (!res.ok) { toast(res.error, "error"); return; }
-  editTotal = res.entry.pages;
-  await showEditPage(Math.min(followPage, editTotal));
+  if (res.entry && res.entry.pages) editTotal = res.entry.pages;
+  await showEditPage(Math.max(1, Math.min(followPage, editTotal)));
 }
 
 $("edit-rotate").addEventListener("click", () =>
   editOp(window.pywebview.api.rotate_page(editFile, editPage), editPage));
+
+// Inline two-click confirm (native confirm() is unreliable in pywebview).
+let deleteConfirmTimer = null;
+function resetDeleteConfirm() {
+  clearTimeout(deleteConfirmTimer);
+  const btn = $("edit-delete-page");
+  btn.classList.remove("confirming");
+  btn.innerHTML = "&#10005; Delete Page";
+}
 $("edit-delete-page").addEventListener("click", () => {
-  if (!confirm(`Delete page ${editPage} of ${editTotal}?`)) return;
+  const btn = $("edit-delete-page");
+  if (!btn.classList.contains("confirming")) {
+    btn.classList.add("confirming");
+    btn.textContent = "Click again to confirm";
+    deleteConfirmTimer = setTimeout(resetDeleteConfirm, 3000);
+    return;
+  }
+  resetDeleteConfirm();
   editOp(window.pywebview.api.delete_page(editFile, editPage), editPage);
 });
 $("edit-move-left").addEventListener("click", () =>
@@ -384,6 +400,7 @@ $("edit-move-right").addEventListener("click", () =>
   editOp(window.pywebview.api.move_page(editFile, editPage, 1), editPage + 1));
 
 function closeEditModal() {
+  resetDeleteConfirm();
   $("edit-modal").hidden = true;
   editFile = null;
   refreshLibrary();
@@ -484,8 +501,8 @@ async function refreshActivity() {
     ["CPU time", s.cpu_seconds + " s"],
     ["Library", `${s.library_files} files · ${s.library_mb} MB`],
     ["Trash", `${s.trash_files} files · ${s.trash_mb} MB`],
-    ["Indexed", s.index_entries + " entries"],
-    ["Disk free", s.disk_free_gb != null ? `${s.disk_free_gb} / ${s.disk_total_gb} GB` : "n/a"],
+    ["Thumbnail cache", `${s.thumb_files} files · ${s.thumbs_mb} MB`],
+    ["Total footprint", s.footprint_mb + " MB"],
   ];
   const grid = $("stats-grid");
   grid.innerHTML = "";
@@ -531,6 +548,64 @@ async function refreshActivity() {
 $("btn-activity").addEventListener("click", openActivityModal);
 $("activity-refresh").addEventListener("click", refreshActivity);
 $("activity-close").addEventListener("click", () => { $("activity-modal").hidden = true; });
+
+/* ------------------------------------------------- full-window log view */
+
+async function refreshFullLog() {
+  const res = await window.pywebview.api.get_full_log();
+  if (!res.ok) { toast(res.error, "error"); return; }
+  $("log-meta").textContent = `${res.lines.length} entries \u00b7 ${res.size_kb} KB`;
+  const body = $("log-overlay-body");
+  body.innerHTML = "";
+  if (!res.lines.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No activity recorded yet.";
+    body.appendChild(empty);
+    return;
+  }
+  for (const line of res.lines) {
+    const row = document.createElement("div");
+    row.className = "log-line";
+    row.textContent = line;
+    body.appendChild(row);
+  }
+}
+
+$("btn-full-log").addEventListener("click", async () => {
+  $("activity-modal").hidden = true;
+  $("log-overlay").hidden = false;
+  await refreshFullLog();
+});
+$("log-back").addEventListener("click", () => {
+  $("log-overlay").hidden = true;
+  openActivityModal();
+});
+$("log-refresh").addEventListener("click", refreshFullLog);
+$("log-copy").addEventListener("click", async () => {
+  const res = await window.pywebview.api.get_full_log();
+  if (!res.ok) { toast(res.error, "error"); return; }
+  try {
+    await navigator.clipboard.writeText(res.lines.join("\n"));
+    toast("Log copied to clipboard", "success");
+  } catch (_) {
+    toast("Clipboard unavailable", "error");
+  }
+});
+
+/* ------------------------------------------------------------ info modal */
+
+$("btn-info").addEventListener("click", () => { $("info-modal").hidden = false; });
+$("info-close").addEventListener("click", () => { $("info-modal").hidden = true; });
+for (const tab of document.querySelectorAll(".info-tab")) {
+  tab.addEventListener("click", () => {
+    for (const t of document.querySelectorAll(".info-tab")) t.classList.remove("active");
+    tab.classList.add("active");
+    for (const panel of document.querySelectorAll(".info-panel")) {
+      panel.hidden = panel.id !== tab.dataset.tab;
+    }
+  });
+}
 
 /* ------------------------------------------- developer panel (local only) */
 
@@ -616,15 +691,34 @@ function offerUpdate(update) {
 /* --------------------------------------------------------------- toasts */
 
 function toast(message, kind) {
+  message = String(message);
   const el = document.createElement("div");
   el.className = "toast" + (kind ? " " + kind : "");
-  el.textContent = message;
+  const text = document.createElement("span");
+  text.textContent = message;
+  const close = document.createElement("button");
+  close.className = "toast-close";
+  close.title = "Dismiss";
+  close.textContent = "\u00d7";
+  el.append(text, close);
   $("toasts").appendChild(el);
-  setTimeout(() => {
+
+  // Duration scales with length: ~1s for short messages, up to 4s.
+  let duration = Math.min(4000, 1000 + message.length * 35);
+  if (kind === "error") duration = Math.max(duration, 2500);
+
+  let timer = null;
+  const dismiss = () => {
+    clearTimeout(timer);
     el.style.transition = "opacity 0.4s";
     el.style.opacity = "0";
     setTimeout(() => el.remove(), 400);
-  }, 3200);
+  };
+  const arm = (ms) => { timer = setTimeout(dismiss, ms); };
+  close.addEventListener("click", dismiss);
+  el.addEventListener("mouseenter", () => clearTimeout(timer));
+  el.addEventListener("mouseleave", () => arm(1500));
+  arm(duration);
 }
 
 /* --------------------------------------------- tiny confetti celebration */
