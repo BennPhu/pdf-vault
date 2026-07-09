@@ -25,6 +25,14 @@ async function init() {
   if (!state.configured) {
     $("setup-modal").hidden = false;
   }
+  if (state.folder_access === false) {
+    toast(
+      "macOS is blocking access to your storage folder. Open System Settings → " +
+      "Privacy & Security → Files and Folders and allow PDF Vault, or move your " +
+      "storage folder outside Documents/Desktop.",
+      "error"
+    );
+  }
   await refreshLibrary();
   checkUpdatesQuietly();
 }

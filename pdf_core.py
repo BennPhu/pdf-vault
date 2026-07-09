@@ -2,6 +2,7 @@
 
 import base64
 import json
+import os
 import resource
 import shutil
 from collections import deque
@@ -11,7 +12,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -217,6 +218,22 @@ def save_index(index):
     _atomic_write_json(index_file_path(), index)
 
 
+def folder_access_ok():
+    """True if the app is allowed to read the library folder.
+
+    macOS (TCC) can silently deny access to protected folders like
+    ~/Documents; pathlib.glob swallows the PermissionError, which would
+    make the folder look empty. Check explicitly instead.
+    """
+    try:
+        os.listdir(library_dir())
+        return True
+    except FileNotFoundError:
+        return True  # not created yet is fine
+    except OSError:
+        return False
+
+
 def sync_index():
     """Reconcile the index with the library folder (self-healing).
 
@@ -224,11 +241,19 @@ def sync_index():
     the index get added, and index entries whose file is gone get dropped.
     This keeps the UI correct even if files are added or removed outside
     the app (Finder, drag-and-drop races, etc.). Returns the fresh index.
+
+    If the folder cannot be read (macOS permission denial), the index is
+    returned untouched — never wiped based on a folder we cannot see.
     """
     index = load_index()
     changed = False
     lib = library_dir()
-    on_disk = {p.name for p in lib.glob("*.pdf")} if lib.is_dir() else set()
+    try:
+        names = os.listdir(lib) if lib.is_dir() else []
+    except OSError:
+        log_event("error", "cannot read library folder (permission denied?)")
+        return index
+    on_disk = {n for n in names if n.lower().endswith(".pdf")}
 
     # Drop entries whose file has disappeared
     kept = [e for e in index if e["filename"] in on_disk]

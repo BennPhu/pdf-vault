@@ -23,6 +23,13 @@ PLIST="dist/PDF Vault.app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST" 2>/dev/null || \
   /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" "$PLIST"
 
+# Usage descriptions so macOS shows a permission prompt (instead of a silent
+# denial) when the storage folder lives in Documents/Desktop/Downloads
+for KEY in NSDocumentsFolderUsageDescription NSDesktopFolderUsageDescription NSDownloadsFolderUsageDescription; do
+  /usr/libexec/PlistBuddy -c "Set :$KEY 'PDF Vault stores and manages your PDF library in the folder you choose.'" "$PLIST" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Add :$KEY string 'PDF Vault stores and manages your PDF library in the folder you choose.'" "$PLIST"
+done
+
 # Optional codesigning: set CODESIGN_ID to your "Developer ID Application: ..." identity
 if [ -n "$CODESIGN_ID" ]; then
   echo "Codesigning with $CODESIGN_ID..."

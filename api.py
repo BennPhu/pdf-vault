@@ -36,6 +36,7 @@ class Api:
             version=__version__,
             configured=pdf_core.is_configured(),
             storage_dir=str(pdf_core.storage_dir()),
+            folder_access=pdf_core.folder_access_ok(),
         )
 
     def choose_storage_dir(self):
