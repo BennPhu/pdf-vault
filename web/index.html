@@ -15,6 +15,7 @@
   <div class="topbar-actions">
     <button class="btn ghost" id="btn-updates">Check for Updates</button>
     <button class="btn ghost" id="btn-storage" title="Change storage folder">&#9881; Storage</button>
+    <button class="btn ghost" id="btn-activity" title="Program log &amp; stats">&#128202; Activity</button>
   </div>
 </header>
 
@@ -102,6 +103,21 @@
     <div class="modal-actions">
       <button class="btn primary" id="split-confirm">Save&hellip;</button>
       <button class="btn ghost" id="split-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Activity log & stats modal -->
+<div class="modal-backdrop" id="activity-modal" hidden>
+  <div class="modal wide activity-modal">
+    <h2>Activity &amp; Stats</h2>
+    <div class="stats-grid" id="stats-grid"></div>
+    <p class="muted storage-path" id="stats-storage"></p>
+    <h3>Recent Activity</h3>
+    <div class="log-list" id="log-list"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="activity-refresh">Refresh</button>
+      <button class="btn primary" id="activity-close">Close</button>
     </div>
   </div>
 </div>

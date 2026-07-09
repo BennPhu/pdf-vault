@@ -328,6 +328,78 @@ $("split-confirm").addEventListener("click", async () => {
   else if (res.error !== "cancelled") toast(res.error, "error");
 });
 
+/* ------------------------------------------------------ activity & stats */
+
+function fmtUptime(sec) {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return h ? `${h}h ${m}m` : m ? `${m}m ${s}s` : `${s}s`;
+}
+
+async function openActivityModal() {
+  $("activity-modal").hidden = false;
+  await refreshActivity();
+}
+
+async function refreshActivity() {
+  const res = await window.pywebview.api.get_activity();
+  if (!res.ok) { toast(res.error, "error"); return; }
+  const s = res.stats;
+
+  const cards = [
+    ["Version", "v" + s.version],
+    ["Uptime", fmtUptime(s.uptime_seconds)],
+    ["Memory", s.memory_mb + " MB"],
+    ["CPU time", s.cpu_seconds + " s"],
+    ["Library", `${s.library_files} files · ${s.library_mb} MB`],
+    ["Trash", `${s.trash_files} files · ${s.trash_mb} MB`],
+    ["Indexed", s.index_entries + " entries"],
+    ["Disk free", s.disk_free_gb != null ? `${s.disk_free_gb} / ${s.disk_total_gb} GB` : "n/a"],
+  ];
+  const grid = $("stats-grid");
+  grid.innerHTML = "";
+  for (const [label, value] of cards) {
+    const el = document.createElement("div");
+    el.className = "stat-card";
+    const v = document.createElement("div");
+    v.className = "stat-value";
+    v.textContent = value;
+    const l = document.createElement("div");
+    l.className = "stat-label";
+    l.textContent = label;
+    el.append(v, l);
+    grid.appendChild(el);
+  }
+  $("stats-storage").textContent = "Storage: " + s.storage_dir;
+
+  const list = $("log-list");
+  list.innerHTML = "";
+  if (!res.log.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No activity yet this session.";
+    list.appendChild(empty);
+  }
+  for (const ev of res.log) {
+    const row = document.createElement("div");
+    row.className = "log-row";
+    const time = document.createElement("span");
+    time.className = "log-time";
+    time.textContent = ev.time.replace("T", " ");
+    const action = document.createElement("span");
+    action.className = "log-action log-" + ev.action;
+    action.textContent = ev.action;
+    const detail = document.createElement("span");
+    detail.className = "log-detail";
+    detail.textContent = ev.detail;
+    row.append(time, action, detail);
+    list.appendChild(row);
+  }
+}
+
+$("btn-activity").addEventListener("click", openActivityModal);
+$("activity-refresh").addEventListener("click", refreshActivity);
+$("activity-close").addEventListener("click", () => { $("activity-modal").hidden = true; });
+
 /* ------------------------------------------------------ storage / setup */
 
 $("setup-choose").addEventListener("click", async () => {

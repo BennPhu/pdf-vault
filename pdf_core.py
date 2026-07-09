@@ -2,14 +2,16 @@
 
 import base64
 import json
+import resource
 import shutil
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.2.2"
+__version__ = "1.3.0"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -22,9 +24,84 @@ MAX_PAGES = 10000
 
 _config = None
 
+_APP_START = datetime.now()
+_activity_log = deque(maxlen=500)  # in-memory ring buffer of recent events
+
 
 class PDFError(Exception):
     """Raised when a PDF operation fails."""
+
+
+# ------------------------------------------------------------ activity log
+
+def log_file_path():
+    return storage_dir() / "activity.log"
+
+
+def log_event(action, detail=""):
+    """Record an event touching the user's folder (in memory + on disk)."""
+    event = {
+        "time": datetime.now().isoformat(timespec="seconds"),
+        "action": action,
+        "detail": str(detail),
+    }
+    _activity_log.append(event)
+    try:
+        with open(log_file_path(), "a", encoding="utf-8") as f:
+            f.write(f"{event['time']}  {action:<10} {event['detail']}\n")
+    except OSError:
+        pass  # logging must never break the app
+    return event
+
+
+def get_log(limit=200):
+    """Most recent events, newest first."""
+    return list(_activity_log)[-limit:][::-1]
+
+
+def _dir_size(path):
+    """Total size in bytes of all files under path (0 if missing)."""
+    total = 0
+    if path.is_dir():
+        for p in path.rglob("*"):
+            try:
+                if p.is_file():
+                    total += p.stat().st_size
+            except OSError:
+                continue
+    return total
+
+
+def get_stats():
+    """Program + storage statistics for the settings log page."""
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    # ru_maxrss is bytes on macOS
+    memory_mb = usage.ru_maxrss / (1024 * 1024)
+    lib, trash = library_dir(), trash_dir()
+    lib_files = list(lib.glob("*.pdf")) if lib.is_dir() else []
+    trash_files = list(trash.glob("*.pdf")) if trash.is_dir() else []
+    try:
+        disk = shutil.disk_usage(str(storage_dir()))
+        disk_free_gb = disk.free / (1024 ** 3)
+        disk_total_gb = disk.total / (1024 ** 3)
+    except OSError:
+        disk_free_gb = disk_total_gb = None
+    uptime = datetime.now() - _APP_START
+    return {
+        "version": __version__,
+        "uptime_seconds": int(uptime.total_seconds()),
+        "memory_mb": round(memory_mb, 1),
+        "cpu_seconds": round(usage.ru_utime + usage.ru_stime, 1),
+        "storage_dir": str(storage_dir()),
+        "library_files": len(lib_files),
+        "library_mb": round(_dir_size(lib) / (1024 * 1024), 2),
+        "trash_files": len(trash_files),
+        "trash_mb": round(_dir_size(trash) / (1024 * 1024), 2),
+        "index_entries": len(load_index()),
+        "disk_free_gb": round(disk_free_gb, 1) if disk_free_gb is not None else None,
+        "disk_total_gb": round(disk_total_gb, 1) if disk_total_gb is not None else None,
+        "log_events": len(_activity_log),
+    }
 
 
 # --------------------------------------------------------------------- config
@@ -178,6 +255,7 @@ def sync_index():
 
     if changed:
         save_index(index)
+        log_event("sync", f"index reconciled with folder ({len(index)} files)")
     return index
 
 
@@ -257,6 +335,7 @@ def add_pdf(source_path):
     index = load_index()
     index.append(entry)
     save_index(index)
+    log_event("add", f"{dest.name} ({entry['pages']} pages)")
     return entry
 
 
@@ -274,6 +353,7 @@ def delete_pdf(filename):
         trash_dir().mkdir(parents=True, exist_ok=True)
         shutil.move(str(path), str(trash_dir() / filename))
     save_index([e for e in index if e["filename"] != filename])
+    log_event("delete", f"{filename} -> trash")
     return entry
 
 
@@ -289,6 +369,7 @@ def restore_pdf(entry):
     if not any(e["filename"] == filename for e in index):
         index.append(entry)
         save_index(index)
+    log_event("restore", f"{filename} <- trash")
     return entry
 
 
@@ -305,6 +386,7 @@ def merge_pdfs(paths, output_path):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "wb") as f:
         writer.write(f)
+    log_event("merge", f"{len(paths)} PDFs -> {output_path.name}")
     return output_path
 
 
@@ -321,6 +403,7 @@ def extract_pages(source_path, start, end, output_path):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "wb") as f:
         writer.write(f)
+    log_event("split", f"pages {start}-{end} -> {output_path.name}")
     return output_path
 
 
@@ -348,6 +431,7 @@ def build_master(output_path):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "wb") as f:
         writer.write(f)
+    log_event("master", f"{len(index)} PDFs -> {output_path.name}")
     return output_path
 
 
@@ -375,6 +459,7 @@ def split_pdf(source_path, output_dir, start=None, end=None):
         with open(out, "wb") as f:
             writer.write(f)
         written.append(out)
+    log_event("split", f"{stem}: {len(written)} pages -> {output_dir.name}/")
     return written
 
 

@@ -3,6 +3,15 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.3.0] - 2026-07-09
+
+### Added
+- Activity & Stats page (📊 Activity button in the top bar): live program
+  stats (memory, CPU time, uptime, disk usage, library/trash size) and a
+  running log of every action touching the storage folder (add, delete,
+  restore, merge, split, master, index sync)
+- Activity log also persisted to `activity.log` in the storage folder
+
 ## [1.2.2] - 2026-07-09
 
 ### Fixed

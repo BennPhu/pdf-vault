@@ -179,6 +179,15 @@ class Api:
                 errors.append(str(e))
         return _ok(restored=restored, errors=errors)
 
+    # ------------------------------------------------------ activity & stats
+
+    def get_activity(self):
+        """Recent activity log + program/storage stats for the settings page."""
+        try:
+            return _ok(log=pdf_core.get_log(), stats=pdf_core.get_stats())
+        except Exception as e:
+            return _err(e)
+
     # ------------------------------------------------------------- updates
 
     def check_updates(self):
