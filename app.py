@@ -35,7 +35,11 @@ def bind_drag_drop(window, api):
         if not paths:
             return
         result = api.add_paths(paths)
-        window.evaluate_js(f"onNativeDrop({json.dumps(result)})")
+        try:
+            window.evaluate_js(
+                f"window.onNativeDrop && window.onNativeDrop({json.dumps(result)})")
+        except Exception:
+            pass  # JS fallback in app.js refreshes the library on drop anyway
 
     def on_drag(e):
         pass  # prevent_default is what matters here

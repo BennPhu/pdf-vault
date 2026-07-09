@@ -140,10 +140,22 @@ const dropzone = $("dropzone");
   })
 );
 
+/* Fallback: JS can see the drop event (just not the file paths), so refresh
+   the library shortly after any drop in case the Python callback is missed.
+   Python processes the files first; these delayed refreshes pick them up. */
+let nativeDropHandled = false;
+document.addEventListener("drop", () => {
+  nativeDropHandled = false;
+  [600, 1500, 3000].forEach((ms) =>
+    setTimeout(() => { if (!nativeDropHandled) refreshLibrary(); }, ms)
+  );
+});
+
 /* Real file paths are not visible to JS on macOS — app.py intercepts the
    drop natively (pywebview DOM events) and calls onNativeDrop() with the
    result. The listeners above only provide the visual dragover feedback. */
 window.onNativeDrop = function (res) {
+  nativeDropHandled = true;
   dropzone.classList.remove("dragover");
   dropzone.classList.add("bounce");
   setTimeout(() => dropzone.classList.remove("bounce"), 450);
