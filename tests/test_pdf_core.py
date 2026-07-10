@@ -1,6 +1,7 @@
 import json
 import os
 import time
+from pathlib import Path
 
 import pytest
 from pypdf import PdfReader, PdfWriter
@@ -415,6 +416,28 @@ def test_get_file_info(vault):
 def test_get_file_info_missing_file(vault):
     with pytest.raises(PDFError, match="not found"):
         pdf_core.get_file_info("ghost.pdf")
+
+
+def test_default_data_dir_frozen_is_outside_bundle():
+    assert pdf_core._default_data_dir(frozen=True) == (
+        Path.home() / "Documents" / "PDF Vault")
+    assert pdf_core._default_data_dir(frozen=False) == pdf_core.BASE_DIR / "data"
+
+
+def test_migrate_bundle_storage_moves_files(vault, tmp_path, monkeypatch):
+    old = tmp_path / "PDF Vault.app" / "Contents" / "Resources" / "data"
+    (old / "library").mkdir(parents=True)
+    (old / "library" / "doc.pdf").write_bytes(b"%PDF-fake")
+    new = tmp_path / "rescued"
+    monkeypatch.setattr(pdf_core, "_default_data_dir", lambda frozen=None: new)
+    pdf_core.save_config(storage_dir=str(old))
+    assert pdf_core.migrate_bundle_storage() is True
+    assert (new / "library" / "doc.pdf").exists()
+    assert pdf_core.load_config()["storage_dir"] == str(new)
+
+
+def test_migrate_bundle_storage_noop_for_normal_path(vault):
+    assert pdf_core.migrate_bundle_storage() is False
 
 
 def test_clear_log_removes_files_and_memory(vault):

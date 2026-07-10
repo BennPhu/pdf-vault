@@ -3,6 +3,15 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.5.5] - 2026-07-10
+
+### Fixed
+- Critical: the packaged app's "Use default folder" stored your PDFs INSIDE
+  the .app bundle, where every update would silently destroy them. The
+  default is now ~/Documents/PDF Vault, and on launch the app automatically
+  rescues any files from a bundle-internal storage folder and repoints the
+  config (the migration is logged to Activity).
+
 ## [1.5.4] - 2026-07-10 — Storage Modal, Mission, Clear Log
 
 ### Fixed

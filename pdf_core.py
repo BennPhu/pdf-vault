@@ -15,11 +15,27 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.5.4"
+__version__ = "1.5.5"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_DATA_DIR = BASE_DIR / "data"
+
+
+def _default_data_dir(frozen=None):
+    """Default storage location.
+
+    The repo's data/ folder during development, but a real user folder when
+    running as a packaged .app: files stored inside the bundle would be
+    destroyed by every update.
+    """
+    if frozen is None:
+        frozen = bool(getattr(sys, "frozen", False))
+    if frozen:
+        return Path.home() / "Documents" / "PDF Vault"
+    return BASE_DIR / "data"
+
+
+DEFAULT_DATA_DIR = _default_data_dir()
 CONFIG_FILE = Path.home() / ".pdf_vault_config.json"
 
 # Security limits for untrusted PDF input
@@ -272,6 +288,31 @@ def save_config(**updates):
 def is_configured():
     """True if the user has chosen a storage folder."""
     return bool(load_config().get("storage_dir"))
+
+
+def migrate_bundle_storage():
+    """Rescue storage configured inside a .app bundle (pre-1.5.5 default).
+
+    Files inside the bundle are destroyed by every update; move them to the
+    real default folder and repoint the config. No-op for normal setups.
+    Returns True if a migration happened.
+    """
+    current = load_config().get("storage_dir")
+    if not current or ".app/Contents/" not in current:
+        return False
+    old = Path(current)
+    new = _default_data_dir(frozen=True)
+    new.mkdir(parents=True, exist_ok=True)
+    if old.is_dir():
+        for item in old.iterdir():
+            dest = new / item.name
+            with contextlib.suppress(OSError, shutil.Error):
+                if not dest.exists():
+                    shutil.move(str(item), str(dest))
+    save_config(storage_dir=str(new))
+    ensure_dirs()
+    log_event("storage", f"moved out of app bundle -> {new}")
+    return True
 
 
 def set_storage_dir(path):
