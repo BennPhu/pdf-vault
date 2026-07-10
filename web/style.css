@@ -250,7 +250,9 @@ body {
   background: var(--bg, #fff);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
   cursor: grab;
-  transition: transform 0.12s ease, border-color 0.12s ease;
+  touch-action: none;      /* pointer-event dragging owns all gestures */
+  user-select: none;
+  -webkit-user-select: none;
 }
 .reorder-tile:active { cursor: grabbing; }
 .reorder-tile img {
@@ -259,8 +261,28 @@ body {
   border-radius: 8px;
   pointer-events: none;
 }
-.reorder-tile.dragging { opacity: 0.4; transform: scale(0.95); }
-.reorder-tile.drop-target { border-color: var(--accent, #E07A5F); transform: scale(1.04); }
+.reorder-tile.drag-hidden { display: none; }
+
+/* Floating copy of the page under the cursor while dragging */
+.reorder-ghost {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  opacity: 0.95;
+  transform: scale(1.05);
+  will-change: transform;
+  cursor: grabbing;
+}
+
+/* Suggested drop slot: a dashed box opens between pages where the
+   dragged page will land, shifting the following pages over */
+.reorder-placeholder {
+  border: 2px dashed var(--accent, #E07A5F);
+  border-radius: 10px;
+  background: rgba(224, 122, 95, 0.08);
+  box-sizing: border-box;
+}
 
 .reorder-badge {
   position: absolute;

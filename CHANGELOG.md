@@ -3,6 +3,18 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.6.2] - 2026-07-10
+
+### Fixed
+- Reorder dragging is now completely smooth. Root cause of the remaining
+  lag: the app's native file-drop hook listens to document dragover with a
+  Python callback, so HTML5 tile drags round-tripped through the Python
+  bridge on every drag event. The reorder grid now uses pointer events
+  (zero Python traffic while dragging) with a floating ghost of the page
+  under the cursor and a dashed placeholder box that opens between pages
+  exactly where the page will land, shifting the following pages over.
+  Long documents auto-scroll when dragging near the grid's edge.
+
 ## [1.6.1] - 2026-07-10
 
 ### Fixed

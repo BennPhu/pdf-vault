@@ -554,7 +554,6 @@ $("edit-move-right").addEventListener("click", () =>
 
 /* --------------------------------------- reorder view (drag & drop grid) */
 
-let dragTile = null;       // tile element being dragged
 let reorderTotal = 0;      // page count reported by the backend
 let reorderLoadToken = 0;  // cancels a chunk-loading loop when view closes
 
@@ -586,6 +585,7 @@ async function openReorderView() {
 
 function closeReorderView() {
   reorderLoadToken++;
+  abortTileDrag();
   $("edit-reorder-view").hidden = true;
   $("edit-single-view").hidden = false;
   showEditPage(Math.min(editPage, editTotal));
@@ -594,7 +594,6 @@ function closeReorderView() {
 function makeReorderTile(thumb, pageNum) {
   const tile = document.createElement("div");
   tile.className = "reorder-tile";
-  tile.draggable = true;
   tile.dataset.page = String(pageNum);
 
   const img = document.createElement("img");
@@ -607,31 +606,147 @@ function makeReorderTile(thumb, pageNum) {
   badge.textContent = String(pageNum);
   tile.appendChild(badge);
 
-  tile.addEventListener("dragstart", () => {
-    dragTile = tile;
-    tile.classList.add("dragging");
-  });
-  tile.addEventListener("dragend", () => {
-    dragTile = null;
-    tile.classList.remove("dragging");
-    $("reorder-grid").querySelectorAll(".drop-target")
-      .forEach((t) => t.classList.remove("drop-target"));
-  });
-  tile.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    if (dragTile && dragTile !== tile) tile.classList.add("drop-target");
-  });
-  tile.addEventListener("dragleave", () => tile.classList.remove("drop-target"));
-  tile.addEventListener("drop", (e) => {
-    e.preventDefault();
-    tile.classList.remove("drop-target");
-    if (!dragTile || dragTile === tile) return;
-    const tiles = [...$("reorder-grid").children];
-    if (tiles.indexOf(dragTile) < tiles.indexOf(tile)) tile.after(dragTile);
-    else tile.before(dragTile);
-    syncReorderState();
-  });
+  tile.addEventListener("pointerdown", (e) => startTileDrag(e, tile));
   return tile;
+}
+
+/* Pointer-event dragging. HTML5 drag-and-drop is deliberately avoided here:
+   the native file-drop hook in app.py listens to document dragover with a
+   Python callback, so HTML5 tile drags would round-trip through the Python
+   bridge on every event — the source of the reorder lag. Pointer events
+   never touch that machinery.
+
+   UX: the picked-up page floats under the cursor as a ghost, and a dashed
+   placeholder box opens up between pages exactly where it will land,
+   shifting the following pages over. */
+
+const DRAG_THRESHOLD_PX = 5; // clicks stay clicks below this movement
+const SCROLL_EDGE_PX = 40;   // auto-scroll zone at the grid's top/bottom
+const SCROLL_STEP_PX = 9;    // scroll speed per frame inside that zone
+
+let drag = null; // active drag state, or null
+
+function startTileDrag(e, tile) {
+  if (e.button !== 0 || drag) return;
+  drag = {
+    tile,
+    pointerId: e.pointerId,
+    startX: e.clientX,
+    startY: e.clientY,
+    x: e.clientX,
+    y: e.clientY,
+    active: false,
+    ghost: null,
+    placeholder: null,
+    origNext: null,
+    raf: 0,
+  };
+  tile.setPointerCapture(e.pointerId);
+  tile.addEventListener("pointermove", onTileDragMove);
+  tile.addEventListener("pointerup", onTileDragEnd);
+  tile.addEventListener("pointercancel", onTileDragCancel);
+}
+
+function onTileDragMove(e) {
+  if (!drag) return;
+  drag.x = e.clientX;
+  drag.y = e.clientY;
+  if (!drag.active &&
+      Math.hypot(drag.x - drag.startX, drag.y - drag.startY) >= DRAG_THRESHOLD_PX) {
+    activateTileDrag();
+  }
+}
+
+function activateTileDrag() {
+  const tile = drag.tile;
+  const r = tile.getBoundingClientRect();
+
+  const ghost = tile.cloneNode(true);
+  ghost.classList.add("reorder-ghost");
+  ghost.style.width = `${r.width}px`;
+  ghost.style.height = `${r.height}px`;
+  ghost.style.left = `${r.left}px`;
+  ghost.style.top = `${r.top}px`;
+  document.body.appendChild(ghost);
+
+  const placeholder = document.createElement("div");
+  placeholder.className = "reorder-placeholder";
+  placeholder.style.height = `${r.height}px`;
+
+  drag.origNext = tile.nextElementSibling;
+  tile.before(placeholder);
+  tile.classList.add("drag-hidden");
+
+  drag.ghost = ghost;
+  drag.placeholder = placeholder;
+  drag.startX = drag.x;
+  drag.startY = drag.y;
+  drag.active = true;
+  drag.raf = requestAnimationFrame(tileDragFrame);
+}
+
+/* One frame of the drag: move the ghost (GPU transform only), auto-scroll
+   near the grid edges, and slide the placeholder to the insertion slot. */
+function tileDragFrame() {
+  if (!drag || !drag.active) return;
+  const { x, y, ghost, placeholder, tile } = drag;
+  ghost.style.transform =
+    `translate(${x - drag.startX}px, ${y - drag.startY}px) scale(1.05)`;
+
+  const grid = $("reorder-grid");
+  const gr = grid.getBoundingClientRect();
+  if (y < gr.top + SCROLL_EDGE_PX) grid.scrollTop -= SCROLL_STEP_PX;
+  else if (y > gr.bottom - SCROLL_EDGE_PX) grid.scrollTop += SCROLL_STEP_PX;
+
+  for (const t of grid.children) {
+    if (t === tile || t === placeholder) continue;
+    const r = t.getBoundingClientRect();
+    if (y < r.top || y > r.bottom || x < r.left || x > r.right) continue;
+    if (x < r.left + r.width / 2) {
+      if (t.previousElementSibling !== placeholder) t.before(placeholder);
+    } else if (t.nextElementSibling !== placeholder) {
+      t.after(placeholder);
+    }
+    break;
+  }
+  drag.raf = requestAnimationFrame(tileDragFrame);
+}
+
+function onTileDragEnd() {
+  if (!drag) return;
+  if (drag.active) {
+    drag.placeholder.before(drag.tile); // land in the suggested slot
+    finishTileDrag();
+    syncReorderState();
+  } else {
+    finishTileDrag();
+  }
+}
+
+function onTileDragCancel() {
+  if (!drag) return;
+  if (drag.active) {
+    // restore the original position
+    if (drag.origNext) drag.origNext.before(drag.tile);
+    else $("reorder-grid").appendChild(drag.tile);
+  }
+  finishTileDrag();
+}
+
+function finishTileDrag() {
+  const { tile, ghost, placeholder, raf } = drag;
+  cancelAnimationFrame(raf);
+  tile.classList.remove("drag-hidden");
+  tile.removeEventListener("pointermove", onTileDragMove);
+  tile.removeEventListener("pointerup", onTileDragEnd);
+  tile.removeEventListener("pointercancel", onTileDragCancel);
+  if (ghost) ghost.remove();
+  if (placeholder) placeholder.remove();
+  drag = null;
+}
+
+function abortTileDrag() {
+  if (drag) onTileDragCancel();
 }
 
 function currentReorderOrder() {
@@ -665,6 +780,7 @@ $("reorder-apply").addEventListener("click", async () => {
 function closeEditModal() {
   resetDeleteConfirm();
   reorderLoadToken++; // cancel any in-flight thumbnail loading
+  abortTileDrag();
   $("edit-modal").hidden = true;
   $("edit-reorder-view").hidden = true;
   $("edit-single-view").hidden = false;
