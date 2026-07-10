@@ -35,11 +35,11 @@ def bind_drag_drop(window, api):
         paths = [f["pywebviewFullPath"] for f in files if f.get("pywebviewFullPath")]
         if not paths:
             return
-        result = api.add_paths(paths)
-        # JS fallback in app.js refreshes the library on drop anyway
+        # Hand the raw paths to JS, which adds them one at a time so the
+        # user sees a live progress bar instead of a frozen window.
         with contextlib.suppress(Exception):
             window.evaluate_js(
-                f"window.onNativeDrop && window.onNativeDrop({json.dumps(result)})")
+                f"window.onNativeDropPaths && window.onNativeDropPaths({json.dumps(paths)})")
 
     def on_drag(e):
         pass  # prevent_default is what matters here

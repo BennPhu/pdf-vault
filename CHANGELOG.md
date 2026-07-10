@@ -3,6 +3,24 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.6.0] - 2026-07-10 — The Finished Release
+
+### Added
+- Import progress bar: files are added one at a time with a live
+  "Adding 12 / 78 — name.pdf" overlay — the window never freezes on big
+  drops; errors are collected and summarized at the end
+- Drag-and-drop page reordering: new ⇅ Reorder view in Edit Pages shows
+  every page as a draggable tile; Apply Order rewrites the file in a single
+  disk write (previously: one write per single-step move); fully compatible
+  with Discard Changes
+- README: tech-stack table, badges, and the mission up top
+
+### Changed
+- Lazy thumbnails: the library list no longer ships every thumbnail in one
+  payload — each card fetches its thumbnail only when it scrolls into view,
+  so large libraries open instantly
+- README no longer references internal coding guidelines
+
 ## [1.5.5] - 2026-07-10
 
 ### Fixed

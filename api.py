@@ -71,27 +71,40 @@ class Api:
     # ------------------------------------------------------------- library
 
     def list_library(self):
-        """Index entries plus a small page-1 thumbnail for each."""
+        """Index entries only; thumbnails load lazily via get_thumb."""
         entries = []
         for entry in pdf_core.sync_index():
             item = dict(entry)
-            path = pdf_core.library_path(entry["filename"])
-            item["missing"] = not path.exists()
-            if not item["missing"]:
-                item["thumb"] = pdf_core.get_thumbnail_b64(entry["filename"])
+            item["missing"] = not pdf_core.library_path(entry["filename"]).exists()
             entries.append(item)
-        pdf_core.shrink_render_cache()
         return _ok(entries=entries)
 
-    def add_pdfs_dialog(self):
-        """Native file picker, then add the chosen PDFs or images."""
+    def get_thumb(self, filename):
+        """Page-1 thumbnail for one library card (lazy-loaded by the UI)."""
+        try:
+            thumb = pdf_core.get_thumbnail_b64(filename)
+            pdf_core.shrink_render_cache()
+            return _ok(thumb=thumb)
+        except PDFError as e:
+            return _err(e)
+
+    def pick_files(self):
+        """Native file picker; returns the chosen paths WITHOUT adding them,
+        so the UI can drive a per-file progress bar via add_paths."""
         result = self._window.create_file_dialog(
             webview.OPEN_DIALOG, allow_multiple=True,
             file_types=("PDFs and images (*.pdf;*.png;*.jpg;*.jpeg;*.webp)",
                         "PDF files (*.pdf)"))
         if not result:
             return _err("cancelled")
-        return self.add_paths(list(result))
+        return _ok(paths=list(result))
+
+    def add_pdfs_dialog(self):
+        """Native file picker, then add the chosen PDFs or images."""
+        picked = self.pick_files()
+        if not picked["ok"]:
+            return picked
+        return self.add_paths(picked["paths"])
 
     def add_paths(self, paths):
         """Add PDFs/images by absolute path (drag-and-drop and the picker)."""
@@ -134,6 +147,20 @@ class Api:
             return _ok(entry=pdf_core.move_page(
                 filename, int(page_number), int(direction)))
         except (PDFError, ValueError, TypeError) as e:
+            return _err(e)
+
+    def reorder_pages(self, filename, order):
+        """Apply a full page permutation in one write (Reorder grid)."""
+        try:
+            return _ok(entry=pdf_core.reorder_pages(filename, order))
+        except (PDFError, ValueError, TypeError) as e:
+            return _err(e)
+
+    def get_page_thumbs(self, filename):
+        """Small thumbnails of every page for the reorder grid."""
+        try:
+            return _ok(thumbs=pdf_core.render_page_thumbs(filename))
+        except PDFError as e:
             return _err(e)
 
     def begin_edit(self, filename):

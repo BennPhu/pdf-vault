@@ -135,26 +135,46 @@
 <div class="modal-backdrop" id="edit-modal" hidden>
   <div class="modal wide edit-modal">
     <h2 id="edit-title">Edit Pages</h2>
-    <div class="edit-preview-box">
-      <img id="edit-img" alt="Page preview">
-    </div>
-    <div class="edit-toolbar">
-      <div class="preview-nav">
-        <button class="btn round" id="edit-prev" title="Previous page">&#9664;</button>
-        <span id="edit-page-label" class="page-chip"></span>
-        <button class="btn round" id="edit-next" title="Next page">&#9654;</button>
+    <div id="edit-single-view">
+      <div class="edit-preview-box">
+        <img id="edit-img" alt="Page preview">
       </div>
-      <div class="edit-ops">
-        <button class="btn secondary" id="edit-rotate" title="Rotate this page 90&deg; clockwise">&#8635; Rotate</button>
-        <button class="btn secondary" id="edit-move-left" title="Move this page earlier">&#8676; Move</button>
-        <button class="btn secondary" id="edit-move-right" title="Move this page later">Move &#8677;</button>
-        <button class="btn danger" id="edit-delete-page" title="Delete this page">&#10005; Delete Page</button>
+      <div class="edit-toolbar">
+        <div class="preview-nav">
+          <button class="btn round" id="edit-prev" title="Previous page">&#9664;</button>
+          <span id="edit-page-label" class="page-chip"></span>
+          <button class="btn round" id="edit-next" title="Next page">&#9654;</button>
+        </div>
+        <div class="edit-ops">
+          <button class="btn secondary" id="edit-rotate" title="Rotate this page 90&deg; clockwise">&#8635; Rotate</button>
+          <button class="btn secondary" id="edit-move-left" title="Move this page earlier">&#8676; Move</button>
+          <button class="btn secondary" id="edit-move-right" title="Move this page later">Move &#8677;</button>
+          <button class="btn secondary" id="edit-reorder" title="Drag pages into a new order">&#8645; Reorder</button>
+          <button class="btn danger" id="edit-delete-page" title="Delete this page">&#10005; Delete Page</button>
+        </div>
+      </div>
+    </div>
+    <div id="edit-reorder-view" hidden>
+      <p class="muted reorder-hint">Drag pages into the order you want, then Apply.</p>
+      <div class="reorder-grid" id="reorder-grid"></div>
+      <div class="modal-actions">
+        <button class="btn primary" id="reorder-apply" disabled>Apply Order</button>
+        <button class="btn ghost" id="reorder-back">Back</button>
       </div>
     </div>
     <div class="modal-actions edit-footer">
       <button class="btn ghost" id="edit-discard" disabled title="Undo every change made in this session">Discard Changes</button>
       <button class="btn primary" id="edit-done">Done</button>
     </div>
+  </div>
+</div>
+
+<!-- Import progress overlay -->
+<div class="modal-backdrop" id="import-overlay" hidden>
+  <div class="modal import-modal">
+    <h2>Adding files&hellip;</h2>
+    <div class="import-track"><div class="import-bar" id="import-bar"></div></div>
+    <p class="muted" id="import-label"></p>
   </div>
 </div>
 

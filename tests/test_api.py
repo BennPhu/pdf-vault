@@ -39,8 +39,11 @@ def test_add_paths_and_list(vault):
     assert listing["ok"] and len(listing["entries"]) == 1
     entry = listing["entries"][0]
     assert entry["pages"] == 2
-    assert entry["thumb"]  # base64 thumbnail present
+    assert "thumb" not in entry  # thumbnails are lazy-loaded via get_thumb
     assert not entry["missing"]
+
+    thumb = api.get_thumb(entry["filename"])
+    assert thumb["ok"] and thumb["thumb"]  # base64 thumbnail on demand
 
 
 def test_add_paths_collects_errors(vault):

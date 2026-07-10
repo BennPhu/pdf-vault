@@ -418,6 +418,49 @@ def test_get_file_info_missing_file(vault):
         pdf_core.get_file_info("ghost.pdf")
 
 
+def make_sized_pdf(directory, name, widths):
+    """One page per width (distinct sizes let tests verify page order)."""
+    writer = PdfWriter()
+    for w in widths:
+        writer.add_blank_page(width=w, height=300)
+    path = directory / name
+    with open(path, "wb") as f:
+        writer.write(f)
+    return path
+
+
+def _page_widths(path):
+    return [int(p.mediabox.width) for p in PdfReader(path).pages]
+
+
+def test_reorder_pages(vault):
+    entry = pdf_core.add_pdf(make_sized_pdf(vault, "doc.pdf", [100, 200, 300]))
+    result = pdf_core.reorder_pages(entry["filename"], [3, 1, 2])
+    assert result["pages"] == 3
+    assert _page_widths(pdf_core.library_path("doc.pdf")) == [300, 100, 200]
+
+
+def test_reorder_pages_rejects_bad_orders(vault):
+    entry = pdf_core.add_pdf(make_sized_pdf(vault, "doc.pdf", [100, 200, 300]))
+    for bad in ([1, 2], [1, 2, 2], [0, 1, 2], [1, 2, 4], ["x", 2, 3]):
+        with pytest.raises(PDFError):
+            pdf_core.reorder_pages(entry["filename"], bad)
+    # file untouched after every rejected attempt
+    assert _page_widths(pdf_core.library_path("doc.pdf")) == [100, 200, 300]
+
+
+def test_reorder_pages_missing_file(vault):
+    with pytest.raises(PDFError):
+        pdf_core.reorder_pages("ghost.pdf", [1])
+
+
+def test_render_page_thumbs(vault):
+    entry = pdf_core.add_pdf(make_sized_pdf(vault, "doc.pdf", [100, 200]))
+    thumbs = pdf_core.render_page_thumbs(entry["filename"])
+    assert len(thumbs) == 2
+    assert all(isinstance(t, str) and len(t) > 100 for t in thumbs)
+
+
 def test_default_data_dir_frozen_is_outside_bundle():
     assert pdf_core._default_data_dir(frozen=True) == (
         Path.home() / "Documents" / "PDF Vault")

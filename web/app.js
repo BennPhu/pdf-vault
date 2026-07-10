@@ -49,7 +49,45 @@ async function init() {
 async function refreshLibrary() {
   const res = await window.pywebview.api.list_library();
   library = res.entries || [];
+  pruneThumbCache();
   renderLibrary();
+}
+
+/* Lazy thumbnails: cards render instantly without images; each thumbnail
+   is fetched only when its card scrolls into view, then cached. */
+const thumbCache = new Map();
+
+function thumbKey(entry) {
+  return `${entry.filename}|${entry.size_bytes || 0}|${entry.pages}`;
+}
+
+function pruneThumbCache() {
+  const live = new Set(library.map(thumbKey));
+  for (const key of thumbCache.keys()) {
+    if (!live.has(key)) thumbCache.delete(key);
+  }
+}
+
+const thumbObserver = new IntersectionObserver((observations) => {
+  for (const obs of observations) {
+    if (!obs.isIntersecting) continue;
+    thumbObserver.unobserve(obs.target);
+    loadThumb(obs.target);
+  }
+}, { rootMargin: "200px" });
+
+async function loadThumb(img) {
+  const key = img.dataset.key;
+  const filename = img.dataset.filename;
+  if (thumbCache.has(key)) {
+    img.src = "data:image/jpeg;base64," + thumbCache.get(key);
+    return;
+  }
+  const res = await window.pywebview.api.get_thumb(filename);
+  if (res.ok && res.thumb) {
+    thumbCache.set(key, res.thumb);
+    img.src = "data:image/jpeg;base64," + res.thumb;
+  }
 }
 
 function visibleLibrary() {
@@ -78,7 +116,13 @@ function renderLibrary() {
 
     const img = document.createElement("img");
     img.className = "card-thumb";
-    if (entry.thumb) img.src = "data:image/jpeg;base64," + entry.thumb;
+    img.dataset.filename = entry.filename;
+    img.dataset.key = thumbKey(entry);
+    if (thumbCache.has(img.dataset.key)) {
+      img.src = "data:image/jpeg;base64," + thumbCache.get(img.dataset.key);
+    } else if (!entry.missing) {
+      thumbObserver.observe(img);
+    }
     card.appendChild(img);
 
     const name = document.createElement("div");
@@ -285,33 +329,58 @@ document.addEventListener("drop", () => {
 /* Real file paths are not visible to JS on macOS — app.py intercepts the
    drop natively (pywebview DOM events) and calls onNativeDrop() with the
    result. The listeners above only provide the visual dragover feedback. */
-window.onNativeDrop = function (res) {
+window.onNativeDropPaths = function (paths) {
   nativeDropHandled = true;
   dropzone.classList.remove("dragover");
   dropzone.classList.add("bounce");
   setTimeout(() => dropzone.classList.remove("bounce"), 450);
-  handleAddResult(res);
+  addPathsWithProgress(paths);
 };
 
 dropzone.addEventListener("click", browse);
 $("btn-browse").addEventListener("click", (e) => { e.stopPropagation(); browse(); });
 
 async function browse() {
-  const res = await window.pywebview.api.add_pdfs_dialog();
-  handleAddResult(res);
-}
-
-async function addPaths(paths) {
-  const res = await window.pywebview.api.add_paths(paths);
-  handleAddResult(res);
-}
-
-function handleAddResult(res) {
+  const res = await window.pywebview.api.pick_files();
   if (!res.ok) return; // cancelled
-  if (res.added && res.added.length) {
-    toast(`Added ${res.added.length} file${res.added.length > 1 ? "s" : ""} to the vault`, "success");
+  await addPathsWithProgress(res.paths);
+}
+
+/* Add files one API call at a time so the window never freezes and the
+   user sees live progress on big batches. */
+let importing = false;
+async function addPathsWithProgress(paths) {
+  if (importing || !paths || !paths.length) return;
+  importing = true;
+  const overlay = $("import-overlay");
+  const bar = $("import-bar");
+  const label = $("import-label");
+  overlay.hidden = false;
+  bar.style.width = "0%";
+  let added = 0;
+  const errors = [];
+  try {
+    for (let i = 0; i < paths.length; i++) {
+      const name = paths[i].split("/").pop();
+      label.textContent = `Adding ${i + 1} / ${paths.length} \u2014 ${name}`;
+      bar.style.width = `${((i + 1) / paths.length) * 100}%`;
+      const res = await window.pywebview.api.add_paths([paths[i]]);
+      if (res.ok) {
+        added += (res.added || []).length;
+        errors.push(...(res.errors || []));
+      } else {
+        errors.push(res.error);
+      }
+    }
+  } finally {
+    overlay.hidden = true;
+    importing = false;
   }
-  (res.errors || []).forEach((err) => toast(err, "error"));
+  if (added) {
+    toast(`Added ${added} file${added > 1 ? "s" : ""} to the vault`, "success");
+  }
+  errors.slice(0, 5).forEach((err) => toast(err, "error"));
+  if (errors.length > 5) toast(`\u2026and ${errors.length - 5} more errors`, "error");
   refreshLibrary();
 }
 
@@ -483,9 +552,91 @@ $("edit-move-left").addEventListener("click", () =>
 $("edit-move-right").addEventListener("click", () =>
   editOp(window.pywebview.api.move_page(editFile, editPage, 1), editPage + 1));
 
+/* --------------------------------------- reorder view (drag & drop grid) */
+
+let reorderOrder = []; // current 1-based page order shown in the grid
+let dragIndex = null;  // grid position being dragged
+
+$("edit-reorder").addEventListener("click", openReorderView);
+$("reorder-back").addEventListener("click", closeReorderView);
+
+async function openReorderView() {
+  const res = await window.pywebview.api.get_page_thumbs(editFile);
+  if (!res.ok) { toast(res.error, "error"); return; }
+  reorderOrder = res.thumbs.map((_, i) => i + 1);
+  renderReorderGrid(res.thumbs);
+  $("edit-single-view").hidden = true;
+  $("edit-reorder-view").hidden = false;
+  $("reorder-apply").disabled = true;
+}
+
+function closeReorderView() {
+  $("edit-reorder-view").hidden = true;
+  $("edit-single-view").hidden = false;
+  showEditPage(Math.min(editPage, editTotal));
+}
+
+function renderReorderGrid(thumbs) {
+  const grid = $("reorder-grid");
+  grid.innerHTML = "";
+  reorderOrder.forEach((pageNum, pos) => {
+    const tile = document.createElement("div");
+    tile.className = "reorder-tile";
+    tile.draggable = true;
+    tile.dataset.pos = String(pos);
+
+    const img = document.createElement("img");
+    img.src = "data:image/jpeg;base64," + thumbs[pageNum - 1];
+    img.draggable = false;
+    tile.appendChild(img);
+
+    const badge = document.createElement("span");
+    badge.className = "reorder-badge";
+    badge.textContent = String(pageNum);
+    tile.appendChild(badge);
+
+    tile.addEventListener("dragstart", () => {
+      dragIndex = pos;
+      tile.classList.add("dragging");
+    });
+    tile.addEventListener("dragend", () => {
+      dragIndex = null;
+      tile.classList.remove("dragging");
+      grid.querySelectorAll(".drop-target").forEach((t) => t.classList.remove("drop-target"));
+    });
+    tile.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      if (dragIndex !== null && dragIndex !== pos) tile.classList.add("drop-target");
+    });
+    tile.addEventListener("dragleave", () => tile.classList.remove("drop-target"));
+    tile.addEventListener("drop", (e) => {
+      e.preventDefault();
+      if (dragIndex === null || dragIndex === pos) return;
+      const [moved] = reorderOrder.splice(dragIndex, 1);
+      reorderOrder.splice(pos, 0, moved);
+      dragIndex = null;
+      renderReorderGrid(thumbs);
+      $("reorder-apply").disabled = reorderOrder.every((p, i) => p === i + 1);
+    });
+    grid.appendChild(tile);
+  });
+}
+
+$("reorder-apply").addEventListener("click", async () => {
+  if (reorderOrder.every((p, i) => p === i + 1)) return;
+  const res = await window.pywebview.api.reorder_pages(editFile, reorderOrder);
+  if (!res.ok) { toast(res.error, "error"); return; }
+  editDirty = true;
+  $("edit-discard").disabled = false;
+  toast("Pages reordered", "success");
+  await openReorderView(); // re-render grid with fresh 1..n order
+});
+
 function closeEditModal() {
   resetDeleteConfirm();
   $("edit-modal").hidden = true;
+  $("edit-reorder-view").hidden = true;
+  $("edit-single-view").hidden = false;
   editFile = null;
   editDirty = false;
   refreshLibrary();

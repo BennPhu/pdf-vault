@@ -15,7 +15,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.5.5"
+__version__ = "1.6.0"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -679,6 +679,55 @@ def move_page(filename, page_number, direction):
     entry = _refresh_entry(filename)
     log_event("edit", f"{filename}: moved page {page_number} to {target}")
     return entry
+
+
+def reorder_pages(filename, order):
+    """Rewrite a PDF with pages in a new order, in one disk write.
+
+    `order` must be a 1-based permutation of every page, e.g. [3, 1, 2].
+    """
+    path = library_path(filename)
+    reader = _validate_pdf(path)
+    total = len(reader.pages)
+    try:
+        order = [int(p) for p in order]
+    except (TypeError, ValueError) as e:
+        raise PDFError(f"Invalid page order: {e}") from e
+    if sorted(order) != list(range(1, total + 1)):
+        raise PDFError(
+            f"Order must contain each page 1-{total} exactly once.")
+    writer = PdfWriter()
+    for page_number in order:
+        writer.add_page(reader.pages[page_number - 1])
+    _atomic_pdf_replace(path, writer)
+    entry = _refresh_entry(filename)
+    log_event("edit", f"{filename}: reordered {total} pages")
+    return entry
+
+
+def render_page_thumbs(filename, max_px=140):
+    """Small base64 JPEG thumbnails of every page, for the reorder grid."""
+    path = library_path(filename)
+    if not path.exists():
+        raise PDFError(f"File not found: {filename}")
+    thumbs = []
+    try:
+        with fitz.open(str(path)) as doc:
+            if len(doc) > MAX_PAGES:
+                raise PDFError(f"Too many pages to render (limit {MAX_PAGES}).")
+            for page in doc:
+                zoom = min(max_px / max(page.rect.width, 1),
+                           max_px / max(page.rect.height, 1), 2.0)
+                pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+                data = pix.tobytes("jpeg", jpg_quality=70)
+                thumbs.append(base64.b64encode(data).decode("ascii"))
+    except PDFError:
+        raise
+    except Exception as e:
+        raise PDFError(f"Could not render pages: {e}") from e
+    finally:
+        shrink_render_cache()
+    return thumbs
 
 
 def _edit_backup_dir():
