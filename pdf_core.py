@@ -15,7 +15,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.6.0"
+__version__ = "1.6.1"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -705,17 +705,28 @@ def reorder_pages(filename, order):
     return entry
 
 
-def render_page_thumbs(filename, max_px=140):
-    """Small base64 JPEG thumbnails of every page, for the reorder grid."""
+THUMB_CHUNK_MAX = 24  # bound on pages rendered per get_page_thumbs call
+
+
+def render_page_thumbs(filename, first=1, count=12, max_px=140):
+    """Small base64 JPEG thumbnails for a bounded chunk of pages.
+
+    Returns {"thumbs": [...], "total": n, "first": first}. The reorder grid
+    loads chunks progressively so large PDFs never block the UI.
+    """
     path = library_path(filename)
     if not path.exists():
         raise PDFError(f"File not found: {filename}")
+    first = max(1, int(first))
+    count = max(1, min(int(count), THUMB_CHUNK_MAX))
     thumbs = []
     try:
         with fitz.open(str(path)) as doc:
-            if len(doc) > MAX_PAGES:
+            total = len(doc)
+            if total > MAX_PAGES:
                 raise PDFError(f"Too many pages to render (limit {MAX_PAGES}).")
-            for page in doc:
+            for i in range(first - 1, min(first - 1 + count, total)):
+                page = doc[i]
                 zoom = min(max_px / max(page.rect.width, 1),
                            max_px / max(page.rect.height, 1), 2.0)
                 pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
@@ -727,7 +738,7 @@ def render_page_thumbs(filename, max_px=140):
         raise PDFError(f"Could not render pages: {e}") from e
     finally:
         shrink_render_cache()
-    return thumbs
+    return {"thumbs": thumbs, "total": total, "first": first}
 
 
 def _edit_backup_dir():

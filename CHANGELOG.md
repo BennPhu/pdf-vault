@@ -3,6 +3,16 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.6.1] - 2026-07-10
+
+### Fixed
+- Reorder view lag: opening it rendered every page thumbnail in a single
+  blocking call, every drag rebuilt the whole grid (re-decoding all images),
+  and Apply re-rendered everything from scratch. Thumbnails now load in
+  chunks of 12 (the grid appears instantly and fills in progressively),
+  dragging moves DOM tiles without any re-render, and Apply just renumbers
+  the tiles in place. Loading is cancelled if the view closes mid-fetch.
+
 ## [1.6.0] - 2026-07-10 — The Finished Release
 
 ### Added

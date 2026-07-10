@@ -156,11 +156,12 @@ class Api:
         except (PDFError, ValueError, TypeError) as e:
             return _err(e)
 
-    def get_page_thumbs(self, filename):
-        """Small thumbnails of every page for the reorder grid."""
+    def get_page_thumbs(self, filename, first=1, count=12):
+        """A bounded chunk of page thumbnails for the reorder grid."""
         try:
-            return _ok(thumbs=pdf_core.render_page_thumbs(filename))
-        except PDFError as e:
+            result = pdf_core.render_page_thumbs(filename, first, count)
+            return _ok(**result)
+        except (PDFError, ValueError, TypeError) as e:
             return _err(e)
 
     def begin_edit(self, filename):

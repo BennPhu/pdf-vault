@@ -456,9 +456,23 @@ def test_reorder_pages_missing_file(vault):
 
 def test_render_page_thumbs(vault):
     entry = pdf_core.add_pdf(make_sized_pdf(vault, "doc.pdf", [100, 200]))
-    thumbs = pdf_core.render_page_thumbs(entry["filename"])
-    assert len(thumbs) == 2
-    assert all(isinstance(t, str) and len(t) > 100 for t in thumbs)
+    result = pdf_core.render_page_thumbs(entry["filename"])
+    assert result["total"] == 2 and result["first"] == 1
+    assert len(result["thumbs"]) == 2
+    assert all(isinstance(t, str) and len(t) > 100 for t in result["thumbs"])
+
+
+def test_render_page_thumbs_chunked(vault):
+    entry = pdf_core.add_pdf(make_sized_pdf(vault, "doc.pdf", [100] * 5))
+    first_chunk = pdf_core.render_page_thumbs(entry["filename"], first=1, count=2)
+    assert len(first_chunk["thumbs"]) == 2 and first_chunk["total"] == 5
+    last_chunk = pdf_core.render_page_thumbs(entry["filename"], first=5, count=2)
+    assert len(last_chunk["thumbs"]) == 1  # clipped at the final page
+    past_end = pdf_core.render_page_thumbs(entry["filename"], first=9, count=2)
+    assert past_end["thumbs"] == []
+    # count is bounded regardless of what the caller asks for
+    capped = pdf_core.render_page_thumbs(entry["filename"], first=1, count=9999)
+    assert len(capped["thumbs"]) == 5
 
 
 def test_default_data_dir_frozen_is_outside_bundle():

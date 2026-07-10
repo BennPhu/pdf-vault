@@ -554,86 +554,117 @@ $("edit-move-right").addEventListener("click", () =>
 
 /* --------------------------------------- reorder view (drag & drop grid) */
 
-let reorderOrder = []; // current 1-based page order shown in the grid
-let dragIndex = null;  // grid position being dragged
+let dragTile = null;       // tile element being dragged
+let reorderTotal = 0;      // page count reported by the backend
+let reorderLoadToken = 0;  // cancels a chunk-loading loop when view closes
 
 $("edit-reorder").addEventListener("click", openReorderView);
 $("reorder-back").addEventListener("click", closeReorderView);
 
+/* Thumbnails load in small chunks so the grid appears instantly and the
+   window never blocks, even on very large PDFs. Tiles are built once and
+   reordered by moving DOM nodes — no re-render, no image re-decode. */
 async function openReorderView() {
-  const res = await window.pywebview.api.get_page_thumbs(editFile);
-  if (!res.ok) { toast(res.error, "error"); return; }
-  reorderOrder = res.thumbs.map((_, i) => i + 1);
-  renderReorderGrid(res.thumbs);
+  const grid = $("reorder-grid");
+  grid.innerHTML = "";
   $("edit-single-view").hidden = true;
   $("edit-reorder-view").hidden = false;
   $("reorder-apply").disabled = true;
+  reorderTotal = editTotal;
+  const token = ++reorderLoadToken;
+  let first = 1;
+  while (first <= reorderTotal) {
+    const res = await window.pywebview.api.get_page_thumbs(editFile, first, 12);
+    if (token !== reorderLoadToken) return; // view closed mid-load
+    if (!res.ok) { toast(res.error, "error"); return; }
+    reorderTotal = res.total;
+    res.thumbs.forEach((thumb, i) => grid.appendChild(makeReorderTile(thumb, first + i)));
+    if (!res.thumbs.length) break;
+    first += res.thumbs.length;
+  }
 }
 
 function closeReorderView() {
+  reorderLoadToken++;
   $("edit-reorder-view").hidden = true;
   $("edit-single-view").hidden = false;
   showEditPage(Math.min(editPage, editTotal));
 }
 
-function renderReorderGrid(thumbs) {
-  const grid = $("reorder-grid");
-  grid.innerHTML = "";
-  reorderOrder.forEach((pageNum, pos) => {
-    const tile = document.createElement("div");
-    tile.className = "reorder-tile";
-    tile.draggable = true;
-    tile.dataset.pos = String(pos);
+function makeReorderTile(thumb, pageNum) {
+  const tile = document.createElement("div");
+  tile.className = "reorder-tile";
+  tile.draggable = true;
+  tile.dataset.page = String(pageNum);
 
-    const img = document.createElement("img");
-    img.src = "data:image/jpeg;base64," + thumbs[pageNum - 1];
-    img.draggable = false;
-    tile.appendChild(img);
+  const img = document.createElement("img");
+  img.src = "data:image/jpeg;base64," + thumb;
+  img.draggable = false;
+  tile.appendChild(img);
 
-    const badge = document.createElement("span");
-    badge.className = "reorder-badge";
-    badge.textContent = String(pageNum);
-    tile.appendChild(badge);
+  const badge = document.createElement("span");
+  badge.className = "reorder-badge";
+  badge.textContent = String(pageNum);
+  tile.appendChild(badge);
 
-    tile.addEventListener("dragstart", () => {
-      dragIndex = pos;
-      tile.classList.add("dragging");
-    });
-    tile.addEventListener("dragend", () => {
-      dragIndex = null;
-      tile.classList.remove("dragging");
-      grid.querySelectorAll(".drop-target").forEach((t) => t.classList.remove("drop-target"));
-    });
-    tile.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      if (dragIndex !== null && dragIndex !== pos) tile.classList.add("drop-target");
-    });
-    tile.addEventListener("dragleave", () => tile.classList.remove("drop-target"));
-    tile.addEventListener("drop", (e) => {
-      e.preventDefault();
-      if (dragIndex === null || dragIndex === pos) return;
-      const [moved] = reorderOrder.splice(dragIndex, 1);
-      reorderOrder.splice(pos, 0, moved);
-      dragIndex = null;
-      renderReorderGrid(thumbs);
-      $("reorder-apply").disabled = reorderOrder.every((p, i) => p === i + 1);
-    });
-    grid.appendChild(tile);
+  tile.addEventListener("dragstart", () => {
+    dragTile = tile;
+    tile.classList.add("dragging");
   });
+  tile.addEventListener("dragend", () => {
+    dragTile = null;
+    tile.classList.remove("dragging");
+    $("reorder-grid").querySelectorAll(".drop-target")
+      .forEach((t) => t.classList.remove("drop-target"));
+  });
+  tile.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    if (dragTile && dragTile !== tile) tile.classList.add("drop-target");
+  });
+  tile.addEventListener("dragleave", () => tile.classList.remove("drop-target"));
+  tile.addEventListener("drop", (e) => {
+    e.preventDefault();
+    tile.classList.remove("drop-target");
+    if (!dragTile || dragTile === tile) return;
+    const tiles = [...$("reorder-grid").children];
+    if (tiles.indexOf(dragTile) < tiles.indexOf(tile)) tile.after(dragTile);
+    else tile.before(dragTile);
+    syncReorderState();
+  });
+  return tile;
+}
+
+function currentReorderOrder() {
+  return [...$("reorder-grid").children].map((t) => Number(t.dataset.page));
+}
+
+function syncReorderState() {
+  const order = currentReorderOrder();
+  const unchanged = order.every((p, i) => p === i + 1);
+  // Apply stays disabled until every page chunk has loaded.
+  $("reorder-apply").disabled = unchanged || order.length !== reorderTotal;
 }
 
 $("reorder-apply").addEventListener("click", async () => {
-  if (reorderOrder.every((p, i) => p === i + 1)) return;
-  const res = await window.pywebview.api.reorder_pages(editFile, reorderOrder);
+  const order = currentReorderOrder();
+  if (order.length !== reorderTotal || order.every((p, i) => p === i + 1)) return;
+  const res = await window.pywebview.api.reorder_pages(editFile, order);
   if (!res.ok) { toast(res.error, "error"); return; }
+  // Tiles are already displayed in the new order — just renumber them
+  // in place instead of re-rendering every thumbnail.
+  [...$("reorder-grid").children].forEach((tile, i) => {
+    tile.dataset.page = String(i + 1);
+    tile.querySelector(".reorder-badge").textContent = String(i + 1);
+  });
+  $("reorder-apply").disabled = true;
   editDirty = true;
   $("edit-discard").disabled = false;
   toast("Pages reordered", "success");
-  await openReorderView(); // re-render grid with fresh 1..n order
 });
 
 function closeEditModal() {
   resetDeleteConfirm();
+  reorderLoadToken++; // cancel any in-flight thumbnail loading
   $("edit-modal").hidden = true;
   $("edit-reorder-view").hidden = true;
   $("edit-single-view").hidden = false;
