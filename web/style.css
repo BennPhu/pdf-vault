@@ -188,6 +188,7 @@ body {
 @keyframes pulse { from { filter: brightness(1); } to { filter: brightness(1.2); } }
 
 .edit-footer { margin-top: 12px; }
+.edit-footer .btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .dev-info {
   max-height: 180px;

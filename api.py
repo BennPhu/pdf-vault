@@ -120,6 +120,26 @@ class Api:
         except (PDFError, ValueError, TypeError) as e:
             return _err(e)
 
+    def begin_edit(self, filename):
+        """Snapshot a PDF so the editing session can be discarded."""
+        try:
+            pdf_core.begin_page_edit(filename)
+            return _ok()
+        except PDFError as e:
+            return _err(e)
+
+    def discard_edit(self, filename):
+        """Restore the pre-edit snapshot, undoing all session edits."""
+        try:
+            return _ok(entry=pdf_core.discard_page_edit(filename))
+        except PDFError as e:
+            return _err(e)
+
+    def commit_edit(self, filename):
+        """Keep the session's edits and drop the snapshot."""
+        pdf_core.commit_page_edit(filename)
+        return _ok()
+
     def compress(self, filenames):
         """Compress the given library PDFs in place; reports bytes saved."""
         before = after = 0

@@ -348,6 +348,41 @@ def test_log_rotation(vault):
     assert log.stat().st_size < pdf_core.LOG_MAX_BYTES
 
 
+def test_discard_page_edit_restores_original(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 3))
+    pdf_core.begin_page_edit(entry["filename"])
+    pdf_core.delete_page(entry["filename"], 1)
+    pdf_core.rotate_page(entry["filename"], 1)
+    assert len(PdfReader(pdf_core.library_path(entry["filename"])).pages) == 2
+    restored = pdf_core.discard_page_edit(entry["filename"])
+    assert restored["pages"] == 3
+    assert len(PdfReader(pdf_core.library_path(entry["filename"])).pages) == 3
+
+
+def test_commit_page_edit_drops_snapshot(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 2))
+    pdf_core.begin_page_edit(entry["filename"])
+    pdf_core.delete_page(entry["filename"], 1)
+    pdf_core.commit_page_edit(entry["filename"])
+    with pytest.raises(PDFError, match="No edit session"):
+        pdf_core.discard_page_edit(entry["filename"])
+    assert len(PdfReader(pdf_core.library_path(entry["filename"])).pages) == 1
+
+
+def test_discard_without_session_raises(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 1))
+    with pytest.raises(PDFError, match="No edit session"):
+        pdf_core.discard_page_edit(entry["filename"])
+
+
+def test_clear_edit_backups(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 1))
+    pdf_core.begin_page_edit(entry["filename"])
+    pdf_core.clear_edit_backups()
+    with pytest.raises(PDFError, match="No edit session"):
+        pdf_core.discard_page_edit(entry["filename"])
+
+
 def test_stats_are_program_only(vault):
     pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 2))
     stats = pdf_core.get_stats()

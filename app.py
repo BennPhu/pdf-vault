@@ -50,6 +50,7 @@ def bind_drag_drop(window, api):
 
 def main():
     pdf_core.purge_trash()
+    pdf_core.clear_edit_backups()  # stale snapshots from a crash mid-edit
     api = Api()
     window = webview.create_window(
         f"PDF Vault {__version__}",

@@ -339,12 +339,18 @@ $("btn-compress").addEventListener("click", async () => {
 
 /* ----------------------------------------------------------- page editor */
 
+let editDirty = false;
+
 $("btn-edit").addEventListener("click", async () => {
   const filename = selectedOne();
   if (!filename) return;
+  const snap = await window.pywebview.api.begin_edit(filename);
+  if (!snap.ok) { toast(snap.error, "error"); return; }
   const entry = library.find((x) => x.filename === filename);
   editFile = filename;
   editTotal = entry ? entry.pages : 1;
+  editDirty = false;
+  $("edit-discard").disabled = true;
   $("edit-title").textContent = `Edit Pages \u2014 ${filename}`;
   $("edit-modal").hidden = false;
   await showEditPage(1);
@@ -368,6 +374,8 @@ $("edit-next").addEventListener("click", () => { if (editPage < editTotal) showE
 async function editOp(promise, followPage) {
   const res = await promise;
   if (!res.ok) { toast(res.error, "error"); return; }
+  editDirty = true;
+  $("edit-discard").disabled = false;
   if (res.entry && res.entry.pages) editTotal = res.entry.pages;
   await showEditPage(Math.max(1, Math.min(followPage, editTotal)));
 }
@@ -403,10 +411,23 @@ function closeEditModal() {
   resetDeleteConfirm();
   $("edit-modal").hidden = true;
   editFile = null;
+  editDirty = false;
   refreshLibrary();
   if (previewFile) showPreview(previewFile, 1);
 }
-$("edit-done").addEventListener("click", closeEditModal);
+
+$("edit-done").addEventListener("click", () => {
+  if (editFile) window.pywebview.api.commit_edit(editFile);
+  closeEditModal();
+});
+
+$("edit-discard").addEventListener("click", async () => {
+  if (!editFile || !editDirty) return;
+  const res = await window.pywebview.api.discard_edit(editFile);
+  if (!res.ok) { toast(res.error, "error"); return; }
+  toast("Changes discarded \u2014 file restored", "success");
+  closeEditModal();
+});
 
 /* ---------------------------------------------------------- split modal */
 

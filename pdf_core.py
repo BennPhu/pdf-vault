@@ -15,7 +15,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.5.1"
+__version__ = "1.5.2"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -621,6 +621,43 @@ def move_page(filename, page_number, direction):
     entry = _refresh_entry(filename)
     log_event("edit", f"{filename}: moved page {page_number} to {target}")
     return entry
+
+
+def _edit_backup_dir():
+    return storage_dir() / ".edit_backup"
+
+
+def begin_page_edit(filename):
+    """Snapshot a library PDF so an editing session can be discarded."""
+    path = library_path(filename)
+    _validate_pdf(path)
+    bdir = _edit_backup_dir()
+    bdir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(path, bdir / filename)
+
+
+def discard_page_edit(filename):
+    """Restore the pre-edit snapshot, undoing every edit in the session."""
+    backup = _edit_backup_dir() / filename
+    if not backup.exists():
+        raise PDFError("No edit session to discard.")
+    shutil.move(str(backup), str(library_path(filename)))
+    entry = _refresh_entry(filename)
+    log_event("edit", f"{filename}: changes discarded")
+    return entry
+
+
+def commit_page_edit(filename):
+    """End an editing session, keeping the changes."""
+    with contextlib.suppress(OSError):
+        (_edit_backup_dir() / filename).unlink(missing_ok=True)
+
+
+def clear_edit_backups():
+    """Remove stale edit snapshots (e.g. after a crash mid-edit)."""
+    bdir = _edit_backup_dir()
+    if bdir.is_dir():
+        shutil.rmtree(bdir, ignore_errors=True)
 
 
 def compress_pdf(filename):

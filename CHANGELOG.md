@@ -3,6 +3,13 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.5.2] - 2026-07-09
+
+### Added
+- Edit Pages: "Discard Changes" button — undoes every rotate/move/delete
+  made in the session and restores the file exactly as it was when the
+  editor opened (snapshot taken on open; stale snapshots cleaned at launch)
+
 ## [1.5.1] - 2026-07-09 — UI/UX Polish
 
 ### Added
