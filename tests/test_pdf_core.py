@@ -391,6 +391,30 @@ def test_stats_are_program_only(vault):
     assert stats["library_files"] == 1
     assert stats["footprint_mb"] >= stats["library_mb"]
     assert "thumbs_mb" in stats and "log_kb" in stats
+    assert "render_cache_mb" in stats
+
+
+def test_shrink_render_cache_empties_store(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 3))
+    pdf_core.render_page_b64(pdf_core.library_path(entry["filename"]), 1)
+    pdf_core.shrink_render_cache()
+    assert pdf_core.render_cache_bytes() == 0
+
+
+def test_get_file_info(vault):
+    entry = pdf_core.add_pdf(make_pdf(vault, "doc.pdf", 2))
+    info = pdf_core.get_file_info(entry["filename"])
+    assert info["filename"] == entry["filename"]
+    assert info["pages"] == 2
+    assert info["size_bytes"] > 0
+    assert info["added"] == entry["added"]
+    assert info["encrypted"] is False
+    assert "pt" in info["page_size"]
+
+
+def test_get_file_info_missing_file(vault):
+    with pytest.raises(PDFError, match="not found"):
+        pdf_core.get_file_info("ghost.pdf")
 
 
 def test_read_log_tail_newest_first(vault):

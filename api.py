@@ -66,6 +66,7 @@ class Api:
             if not item["missing"]:
                 item["thumb"] = pdf_core.get_thumbnail_b64(entry["filename"])
             entries.append(item)
+        pdf_core.shrink_render_cache()
         return _ok(entries=entries)
 
     def add_pdfs_dialog(self):
@@ -91,6 +92,7 @@ class Api:
                 added.append(entry["filename"])
             except PDFError as e:
                 errors.append(str(e))
+        pdf_core.shrink_render_cache()
         return _ok(added=added, errors=errors)
 
     def rename(self, filename, new_name):
@@ -151,6 +153,7 @@ class Api:
                 after += result["after"]
             except PDFError as e:
                 errors.append(str(e))
+        pdf_core.shrink_render_cache()
         return _ok(before=before, after=after, errors=errors)
 
     def render_page(self, filename, page_number):
@@ -159,6 +162,15 @@ class Api:
             data, total = pdf_core.render_page_b64(
                 pdf_core.library_path(filename), page_number)
             return _ok(image=data, total=total, page=page_number)
+        except PDFError as e:
+            return _err(e)
+        finally:
+            pdf_core.shrink_render_cache()
+
+    def get_file_info(self, filename):
+        """Detailed metadata for the file-info panel."""
+        try:
+            return _ok(info=pdf_core.get_file_info(filename))
         except PDFError as e:
             return _err(e)
 
@@ -177,6 +189,8 @@ class Api:
             return _ok(message=f"Merged {len(paths)} PDFs into {Path(output).name}")
         except PDFError as e:
             return _err(e)
+        finally:
+            pdf_core.shrink_render_cache()
 
     def split_range(self, filename, start, end):
         """Extract pages start-end into one new PDF (Split Selected)."""
@@ -205,6 +219,8 @@ class Api:
             return _ok(message=f"Split into {len(written)} one-page file(s)")
         except PDFError as e:
             return _err(e)
+        finally:
+            pdf_core.shrink_render_cache()
 
     def create_master(self):
         output = self._save_dialog("master.pdf")
@@ -216,6 +232,8 @@ class Api:
             return _ok(message=f"Master PDF created: {Path(output).name}")
         except PDFError as e:
             return _err(e)
+        finally:
+            pdf_core.shrink_render_cache()
 
     # -------------------------------------------- developer mode (local only)
 

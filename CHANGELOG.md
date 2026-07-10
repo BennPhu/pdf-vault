@@ -3,6 +3,24 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.5.3] - 2026-07-09 — Memory, About, File Info
+
+### Fixed
+- High memory usage (~500 MB after large imports): MuPDF's internal render
+  cache grows up to ~256 MB and never trims itself — it is now emptied after
+  every heavy operation (imports, previews, thumbnails, merge/split,
+  compress, master). Pages are simply re-decoded from disk when needed.
+  A new "Render cache" stat in Activity lets you verify it stays near zero.
+
+### Added
+- File info next to Preview: hover the ⓘ for quick facts (name, pages,
+  size, added); click it to slide out a full details panel (dates, page
+  dimensions, PDF metadata, encryption status)
+
+### Changed
+- "Info" button renamed to "About"; modal titled "About PDF Vault"
+- File sizes shown in KB when under 1 MB
+
 ## [1.5.2] - 2026-07-09
 
 ### Added

@@ -15,7 +15,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.5.2"
+__version__ = "1.5.3"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -197,6 +197,7 @@ def get_stats():
         "index_entries": len(load_index()),
         "footprint_mb": round(
             (lib_bytes + trash_bytes + thumb_bytes + log_bytes) / (1024 * 1024), 2),
+        "render_cache_mb": round(render_cache_bytes() / (1024 * 1024), 1),
         "log_events": len(_activity_log),
     }
 
@@ -844,6 +845,58 @@ def library_path(filename):
 def page_count(path):
     """Number of pages in a PDF."""
     return len(_validate_pdf(path).pages)
+
+
+def shrink_render_cache():
+    """Empty MuPDF's global object/render store.
+
+    MuPDF caches decoded pages up to ~256 MB and never trims on its own;
+    after batch imports this dominated the app's memory. Rendered data is
+    simply re-decoded from disk the next time it is needed.
+    """
+    # Cache trimming must never break an operation.
+    with contextlib.suppress(Exception):
+        fitz.TOOLS.store_shrink(100)
+
+
+def render_cache_bytes():
+    """Current size of MuPDF's render store in bytes."""
+    try:
+        return int(fitz.TOOLS.store_size)
+    except Exception:
+        return 0
+
+
+def get_file_info(filename):
+    """Full metadata for one library PDF (for the file-info panel)."""
+    path = library_path(filename)
+    if not path.exists():
+        raise PDFError(f"File not found: {filename}")
+    entry = next(
+        (e for e in load_index() if e.get("filename") == filename), {})
+    stat = path.stat()
+    info = {
+        "filename": filename,
+        "size_bytes": stat.st_size,
+        "added": entry.get("added", ""),
+        "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
+        "pages": entry.get("pages", 0),
+    }
+    # Partial info beats an error dialog: metadata extraction is best-effort.
+    with contextlib.suppress(Exception), fitz.open(str(path)) as doc:
+        info["pages"] = len(doc)
+        info["encrypted"] = bool(doc.needs_pass)
+        rect = doc[0].rect if len(doc) else None
+        if rect:
+            info["page_size"] = (
+                f"{rect.width:.0f} x {rect.height:.0f} pt "
+                f"({rect.width / 72:.1f} x {rect.height / 72:.1f} in)")
+        meta = doc.metadata or {}
+        for key in ("title", "author", "creator", "producer", "format"):
+            if meta.get(key):
+                info[key] = meta[key]
+    shrink_render_cache()
+    return info
 
 
 def render_page_b64(path, page_number=1, max_px=900):

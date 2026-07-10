@@ -20,7 +20,7 @@
     <button class="btn ghost" id="btn-updates">Check for Updates</button>
     <button class="btn ghost" id="btn-storage" title="Change storage folder">&#9881; Storage</button>
     <button class="btn ghost" id="btn-activity" title="Program log &amp; stats">&#128202; Activity</button>
-    <button class="btn ghost" id="btn-info" title="How to use, mission &amp; terms">&#8505;&#65039; Info</button>
+    <button class="btn ghost" id="btn-info" title="How to use, mission &amp; terms">&#8505;&#65039; About</button>
   </div>
 </header>
 
@@ -54,8 +54,23 @@
     </div>
   </section>
 
+  <aside class="file-info-panel" id="file-info-panel" hidden>
+    <div class="pane-header">
+      <h2>File Info</h2>
+      <button class="btn ghost small" id="file-info-close" title="Close">&#10005;</button>
+    </div>
+    <div class="file-info-rows" id="file-info-rows"></div>
+  </aside>
+
   <aside class="preview-pane" id="preview-pane">
-    <div class="pane-header"><h2>Preview</h2></div>
+    <div class="pane-header">
+      <h2>Preview</h2>
+      <span class="info-hover-wrap">
+        <button class="info-dot" id="preview-info-btn" hidden
+                title="File information">&#8505;</button>
+        <span class="info-tooltip" id="info-tooltip" hidden></span>
+      </span>
+    </div>
     <div class="preview-body">
       <div class="preview-placeholder" id="preview-placeholder">
         <p class="muted">Click a PDF to preview it</p>
@@ -187,7 +202,7 @@
 <!-- Info modal: how to use, mission, terms -->
 <div class="modal-backdrop" id="info-modal" hidden>
   <div class="modal wide info-modal">
-    <h2>&#8505;&#65039; Info</h2>
+    <h2>About PDF Vault</h2>
     <div class="info-tabs">
       <button class="info-tab active" data-tab="info-howto">How to Use</button>
       <button class="info-tab" data-tab="info-mission">Mission</button>

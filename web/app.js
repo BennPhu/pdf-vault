@@ -154,6 +154,7 @@ function unselectAll() {
 async function showPreview(filename, page) {
   const res = await window.pywebview.api.render_page(filename, page);
   if (!res.ok) { toast(res.error, "error"); return; }
+  const changed = previewFile !== filename;
   previewFile = filename;
   previewPage = res.page;
   previewTotal = res.total;
@@ -162,6 +163,8 @@ async function showPreview(filename, page) {
   $("preview-placeholder").hidden = true;
   $("preview-nav").hidden = false;
   $("page-label").textContent = `${previewPage} / ${previewTotal}`;
+  $("preview-info-btn").hidden = false;
+  if (changed && !$("file-info-panel").hidden) refreshFileInfoPanel();
 }
 
 function clearPreview() {
@@ -169,7 +172,80 @@ function clearPreview() {
   $("preview-img").hidden = true;
   $("preview-placeholder").hidden = false;
   $("preview-nav").hidden = true;
+  $("preview-info-btn").hidden = true;
+  $("info-tooltip").hidden = true;
+  $("file-info-panel").hidden = true;
 }
+
+/* ------------------------------------------------ file info dot & panel */
+
+const FI_LABELS = {
+  filename: "Name", pages: "Pages", size_bytes: "Size", added: "Added",
+  modified: "Modified", page_size: "Page size", encrypted: "Encrypted",
+  title: "Title", author: "Author", creator: "Creator",
+  producer: "Producer", format: "PDF version",
+};
+
+function fmtSize(bytes) {
+  return bytes < 1048576
+    ? (bytes / 1024).toFixed(1) + " KB"
+    : (bytes / 1048576).toFixed(2) + " MB";
+}
+
+function fiFormat(key, value) {
+  if (key === "size_bytes") return fmtSize(value);
+  if (key === "encrypted") return value ? "Yes" : "No";
+  if (key === "added" || key === "modified") return String(value).replace("T", " ");
+  return String(value);
+}
+
+$("preview-info-btn").addEventListener("mouseenter", () => {
+  const entry = library.find((x) => x.filename === previewFile);
+  if (!entry) return;
+  const tip = $("info-tooltip");
+  tip.textContent = "";
+  const facts = [
+    entry.filename,
+    `${entry.pages} page${entry.pages === 1 ? "" : "s"} \u00b7 ${fmtSize(entry.size_bytes || 0)}`,
+    "Added " + String(entry.added || "").replace("T", " "),
+  ];
+  for (const f of facts) {
+    const line = document.createElement("div");
+    line.textContent = f;
+    tip.appendChild(line);
+  }
+  tip.hidden = false;
+});
+$("preview-info-btn").addEventListener("mouseleave", () => { $("info-tooltip").hidden = true; });
+
+async function refreshFileInfoPanel() {
+  const res = await window.pywebview.api.get_file_info(previewFile);
+  if (!res.ok) { toast(res.error, "error"); return; }
+  const rows = $("file-info-rows");
+  rows.innerHTML = "";
+  for (const [key, label] of Object.entries(FI_LABELS)) {
+    if (res.info[key] === undefined || res.info[key] === "") continue;
+    const row = document.createElement("div");
+    row.className = "file-info-row";
+    const l = document.createElement("div");
+    l.className = "fi-label";
+    l.textContent = label;
+    const v = document.createElement("div");
+    v.className = "fi-value";
+    v.textContent = fiFormat(key, res.info[key]);
+    row.append(l, v);
+    rows.appendChild(row);
+  }
+}
+
+$("preview-info-btn").addEventListener("click", async () => {
+  const panel = $("file-info-panel");
+  if (!panel.hidden) { panel.hidden = true; return; }
+  if (!previewFile) return;
+  panel.hidden = false;
+  await refreshFileInfoPanel();
+});
+$("file-info-close").addEventListener("click", () => { $("file-info-panel").hidden = true; });
 
 $("prev-page").addEventListener("click", () => {
   if (previewFile && previewPage > 1) showPreview(previewFile, previewPage - 1);
@@ -523,6 +599,7 @@ async function refreshActivity() {
     ["Library", `${s.library_files} files · ${s.library_mb} MB`],
     ["Trash", `${s.trash_files} files · ${s.trash_mb} MB`],
     ["Thumbnail cache", `${s.thumb_files} files · ${s.thumbs_mb} MB`],
+    ["Render cache", s.render_cache_mb + " MB"],
     ["Total footprint", s.footprint_mb + " MB"],
   ];
   const grid = $("stats-grid");
