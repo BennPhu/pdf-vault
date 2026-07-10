@@ -3,6 +3,28 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.5.4] - 2026-07-10 — Storage Modal, Mission, Clear Log
+
+### Fixed
+- Storage picker "forgot" the chosen folder: the path was always saved, but
+  the picker opened at the home folder and the UI never showed the current
+  location. Storage now opens a modal showing the current path, with
+  Change Folder… (picker starts there), Reveal in Finder, and Cancel.
+
+### Added
+- Clear Log (Activity modal + full log view, two-click confirm): deletes
+  activity.log and its rotated backup, empties the in-memory list, and
+  reports the KB freed
+- Memory-baseline note in About → Mission and SECURITY.md ("Resource
+  footprint"): ~200 MB idle is engine cost, files are never held in memory
+
+### Changed
+- Mission rewritten: PDF Vault is not about merging (macOS does that) — it
+  is about controlling and editing PDFs entirely on your machine, sitting
+  between the native tools and the cloud-based ones, and being open source
+  so anyone can verify it
+- Topbar reordered: About · Check for Updates · Storage · Activity
+
 ## [1.5.3] - 2026-07-09 — Memory, About, File Info
 
 ### Fixed

@@ -17,10 +17,10 @@
     <h1>PDF Vault <span id="version" class="version-chip"></span></h1>
   </div>
   <div class="topbar-actions">
-    <button class="btn ghost" id="btn-updates">Check for Updates</button>
-    <button class="btn ghost" id="btn-storage" title="Change storage folder">&#9881; Storage</button>
-    <button class="btn ghost" id="btn-activity" title="Program log &amp; stats">&#128202; Activity</button>
     <button class="btn ghost" id="btn-info" title="How to use, mission &amp; terms">&#8505;&#65039; About</button>
+    <button class="btn ghost" id="btn-updates">Check for Updates</button>
+    <button class="btn ghost" id="btn-storage" title="View or change storage folder">&#9881; Storage</button>
+    <button class="btn ghost" id="btn-activity" title="Program log &amp; stats">&#128202; Activity</button>
   </div>
 </header>
 
@@ -158,6 +158,20 @@
   </div>
 </div>
 
+<!-- Storage modal -->
+<div class="modal-backdrop" id="storage-modal" hidden>
+  <div class="modal">
+    <h2>&#9881; Storage</h2>
+    <p class="muted">All PDFs, trash, and thumbnails live in this folder:</p>
+    <p class="storage-path" id="storage-path"></p>
+    <div class="modal-actions">
+      <button class="btn secondary" id="storage-change">Change Folder&hellip;</button>
+      <button class="btn secondary" id="storage-reveal">Reveal in Finder</button>
+      <button class="btn ghost" id="storage-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Activity log & stats modal -->
 <div class="modal-backdrop" id="activity-modal" hidden>
   <div class="modal wide activity-modal">
@@ -179,6 +193,7 @@
       </div>
     </div>
     <div class="modal-actions">
+      <button class="btn ghost" id="activity-clear" title="Delete the activity log to reclaim space">Clear Log</button>
       <button class="btn ghost" id="activity-refresh">Refresh</button>
       <button class="btn primary" id="activity-close">Close</button>
     </div>
@@ -194,6 +209,7 @@
     <div class="log-overlay-actions">
       <button class="btn ghost small" id="log-refresh">Refresh</button>
       <button class="btn ghost small" id="log-copy">Copy Log</button>
+      <button class="btn ghost small" id="log-clear" title="Delete the activity log to reclaim space">Clear Log</button>
     </div>
   </div>
   <div class="log-overlay-body" id="log-overlay-body"></div>
@@ -224,9 +240,11 @@
         </ul>
       </div>
       <div class="info-panel" id="info-mission" hidden>
-        <p><strong>PDF Vault exists so you never have to upload a document to "just merge two PDFs" again.</strong></p>
-        <p>Our mission is a light, fast PDF library that is <strong>100% local</strong>: your files never leave your machine, there are no accounts, no ads, no telemetry, and no cloud. The app is free and open source, so anyone can verify exactly what it does.</p>
-        <p>The only network request the app ever makes is an optional, checksum-verified update check against GitHub Releases.</p>
+        <p><strong>macOS can already merge PDFs &mdash; that was never the point.</strong></p>
+        <p>PDF Vault is about <strong>controlling and editing your PDFs on your own terms, without uploading them to anyone's cloud</strong>. Reorder, rotate and delete pages, split, compress, rename, and organize an entire library &mdash; edits that native tools scatter or bury, and that online PDF sites only offer in exchange for your documents.</p>
+        <p>It sits deliberately <strong>between the native PDF tools and the online ones</strong>: more capable and organized than Preview, and 100% private where the web tools are not. Your files never leave your machine &mdash; no accounts, no ads, no telemetry, no cloud. The only network request ever made is an optional, checksum-verified update check against GitHub Releases.</p>
+        <p>And because it is <strong>free and open source (MIT)</strong>, you don't have to take our word for any of this &mdash; anyone can read the code and verify exactly what happens to their files.</p>
+        <p class="muted">A note on memory: the app idles around ~200 MB. That is the fixed cost of its rendering engine (the same WebKit that powers Safari) plus the Python runtime &mdash; your PDFs are never held in memory, and comparable desktop apps typically use 2&ndash;4&times; more.</p>
       </div>
       <div class="info-panel" id="info-terms" hidden>
         <p><strong>License &amp; Agreement (MIT)</strong></p>

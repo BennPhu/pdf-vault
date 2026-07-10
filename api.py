@@ -42,13 +42,27 @@ class Api:
         )
 
     def choose_storage_dir(self):
-        """Native folder picker for the storage location."""
+        """Native folder picker, starting at the current storage folder."""
+        start = pdf_core.storage_dir()
+        if not (pdf_core.is_configured() and start.is_dir()):
+            start = Path.home()
         result = self._window.create_file_dialog(
-            webview.FOLDER_DIALOG, directory=str(Path.home()))
+            webview.FOLDER_DIALOG, directory=str(start))
         if not result:
             return _err("cancelled")
         pdf_core.set_storage_dir(result[0] if isinstance(result, (list, tuple)) else result)
         return self.get_state()
+
+    def reveal_storage(self):
+        """Show the storage folder in Finder."""
+        path = pdf_core.storage_dir()
+        if not path.is_dir():
+            return _err("Storage folder does not exist yet.")
+        try:
+            subprocess.run(["/usr/bin/open", str(path)], check=True, timeout=10)
+            return _ok()
+        except (OSError, subprocess.SubprocessError) as e:
+            return _err(f"Could not open Finder: {e}")
 
     def use_default_storage(self):
         pdf_core.set_storage_dir(pdf_core.DEFAULT_DATA_DIR)
@@ -287,6 +301,14 @@ class Api:
         """Recent activity log + program/storage stats for the settings page."""
         try:
             return _ok(log=pdf_core.get_log(), stats=pdf_core.get_stats())
+        except Exception as e:
+            return _err(e)
+
+    def clear_log(self):
+        """Wipe the activity log (disk + memory) to reclaim space."""
+        try:
+            freed = pdf_core.clear_log()
+            return _ok(freed_kb=round(freed / 1024, 1))
         except Exception as e:
             return _err(e)
 

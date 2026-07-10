@@ -257,7 +257,7 @@ body {
   flex-wrap: wrap;
 }
 .edit-ops .btn:disabled { opacity: 0.35; cursor: not-allowed; filter: grayscale(0.6); }
-.edit-ops .btn.confirming { background: var(--danger); color: #fff; animation: pulse 0.6s ease infinite alternate; }
+.btn.confirming { background: var(--danger); color: #fff; animation: pulse 0.6s ease infinite alternate; }
 @keyframes pulse { from { filter: brightness(1); } to { filter: brightness(1.2); } }
 
 .edit-footer { margin-top: 12px; }

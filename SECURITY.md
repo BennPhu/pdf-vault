@@ -28,6 +28,17 @@
 - **Dependencies** are pinned to exact versions and audited in CI with
   `pip-audit` on every push.
 
+## Resource footprint
+
+The app idles around ~200 MB of memory. This is the fixed cost of the
+embedded WebKit rendering engine (the same one that powers Safari) plus the
+Python runtime and PDF libraries — measured at ~70 MB before a window even
+opens. Your PDFs are never held in memory: they live on disk and are opened,
+processed, and closed per operation, and the PDF engine's internal render
+cache is emptied after every heavy action (visible as the "Render cache"
+stat in Activity). Note that macOS reports memory conservatively: pages
+freed after a peak may remain attributed to the process until it restarts.
+
 ## Supported versions
 
 Only the latest release receives fixes.

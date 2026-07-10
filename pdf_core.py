@@ -15,7 +15,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.5.3"
+__version__ = "1.5.4"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -72,6 +72,22 @@ def log_event(action, detail=""):
 def get_log(limit=200):
     """Most recent events, newest first."""
     return list(_activity_log)[-limit:][::-1]
+
+
+def clear_log():
+    """Delete the persisted log (and its rotation) and empty the in-memory
+    ring buffer. Logs one fresh marker event so the reset is auditable.
+    Returns the number of bytes freed on disk.
+    """
+    freed = 0
+    for path in (log_file_path(), log_file_path().with_suffix(".log.1")):
+        with contextlib.suppress(OSError):
+            if path.exists():
+                freed += path.stat().st_size
+                path.unlink()
+    _activity_log.clear()
+    log_event("log", "activity log cleared by user")
+    return freed
 
 
 def read_log_tail(max_lines=1000):

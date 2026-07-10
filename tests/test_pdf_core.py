@@ -417,6 +417,26 @@ def test_get_file_info_missing_file(vault):
         pdf_core.get_file_info("ghost.pdf")
 
 
+def test_clear_log_removes_files_and_memory(vault):
+    for i in range(10):
+        pdf_core.log_event("event", str(i))
+    log = pdf_core.log_file_path()
+    log.replace(log.with_suffix(".log.1"))  # simulate a rotated generation
+    pdf_core.log_event("event", "current")
+    assert log.exists() and log.with_suffix(".log.1").exists()
+    freed = pdf_core.clear_log()
+    assert freed > 0
+    assert not log.with_suffix(".log.1").exists()
+    lines = pdf_core.read_log_tail()
+    assert len(lines) == 1
+    assert "cleared" in lines[0]
+    assert len(pdf_core.get_log()) == 1
+
+
+def test_clear_log_when_empty(vault):
+    assert pdf_core.clear_log() == 0
+
+
 def test_read_log_tail_newest_first(vault):
     pdf_core.log_event("first", "one")
     pdf_core.log_event("second", "two")

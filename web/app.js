@@ -647,6 +647,36 @@ $("btn-activity").addEventListener("click", openActivityModal);
 $("activity-refresh").addEventListener("click", refreshActivity);
 $("activity-close").addEventListener("click", () => { $("activity-modal").hidden = true; });
 
+// Two-click confirm wrapper (same pattern as Edit Pages delete).
+function armConfirm(btn, label, action) {
+  let timer = null;
+  btn.addEventListener("click", async () => {
+    if (!btn.classList.contains("confirming")) {
+      btn.classList.add("confirming");
+      btn.textContent = "Click again to confirm";
+      timer = setTimeout(() => {
+        btn.classList.remove("confirming");
+        btn.textContent = label;
+      }, 3000);
+      return;
+    }
+    clearTimeout(timer);
+    btn.classList.remove("confirming");
+    btn.textContent = label;
+    await action();
+  });
+}
+
+async function doClearLog(afterRefresh) {
+  const res = await window.pywebview.api.clear_log();
+  if (!res.ok) { toast(res.error, "error"); return; }
+  toast(`Log cleared \u2014 ${res.freed_kb} KB freed`, "success");
+  await afterRefresh();
+}
+
+armConfirm($("activity-clear"), "Clear Log", () => doClearLog(refreshActivity));
+armConfirm($("log-clear"), "Clear Log", () => doClearLog(refreshFullLog));
+
 /* ------------------------------------------------- full-window log view */
 
 async function refreshFullLog() {
@@ -752,8 +782,19 @@ $("setup-default").addEventListener("click", async () => {
 });
 
 $("btn-storage").addEventListener("click", async () => {
+  const state = await window.pywebview.api.get_state();
+  $("storage-path").textContent = state.storage_dir || "(not set)";
+  $("storage-modal").hidden = false;
+});
+$("storage-cancel").addEventListener("click", () => { $("storage-modal").hidden = true; });
+$("storage-reveal").addEventListener("click", async () => {
+  const res = await window.pywebview.api.reveal_storage();
+  if (!res.ok) toast(res.error, "error");
+});
+$("storage-change").addEventListener("click", async () => {
   const res = await window.pywebview.api.choose_storage_dir();
   if (res.ok) {
+    $("storage-modal").hidden = true;
     toast("Storage folder changed", "success");
     unselectAll();
     refreshLibrary();
