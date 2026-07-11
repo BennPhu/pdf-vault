@@ -22,12 +22,12 @@ private where the web tools are not.
 
 - **Library with live search** — drop files in (with a live progress bar on big batches), find them instantly, double-click a name to rename
 - **Preview & file info** — flip through any PDF's pages; hover/click the ⓘ for size, dates, dimensions, and PDF metadata
-- **Merge / Split** — append PDFs to the back of an existing file in your click order (with a confirm-and-reorder dialog), extract page ranges, or split every page to its own file
+- **Append / Split** — add PDFs to the back of an existing file in your click order (with a confirm-and-reorder dialog), extract page ranges, or split every page to its own file
 - **Edit pages** — rotate or delete pages, drag-and-drop them into a new order, and discard the whole editing session if you change your mind
 - **Compress** — shrink bloated or scanned PDFs in place (original kept in trash for undo)
 - **Images → PDF** — drop PNG/JPEG/WebP files and they become PDFs in your library
 - **Delete with undo/redo** — trashed files auto-purge after 30 days
-- **Master PDF** — bind your selection (or the whole library) into one new document, in exactly the order you choose
+- **Combine → New PDF** — bind your selection (or the whole library) into one new document, in exactly the order you choose
 - **Activity & stats** — see exactly what the app has done and what it uses, and clear the log anytime
 
 ## Privacy

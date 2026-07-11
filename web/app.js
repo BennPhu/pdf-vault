@@ -474,7 +474,10 @@ $("btn-redo").addEventListener("click", async () => {
 });
 
 $("btn-merge").addEventListener("click", () => {
-  if (selected.size < 2) { toast("Select at least two PDFs to merge", "error"); return; }
+  if (selected.size < 2) {
+    toast("Select at least two PDFs — one target plus the files to append", "error");
+    return;
+  }
   openOrderModal("merge", [...selected]);
 });
 
@@ -494,7 +497,7 @@ let orderMode = null; // "merge" | "master"
 function openOrderModal(mode, filenames) {
   orderMode = mode;
   $("order-title").textContent =
-    mode === "merge" ? "Append into existing file" : "Confirm master order";
+    mode === "merge" ? "Append into existing file" : "Combine into a new PDF";
   $("order-subtitle").textContent = mode === "merge"
     ? "Files are added to the back of the target, top to bottom. " +
       "Drag or use the arrows to rearrange."
@@ -578,7 +581,7 @@ function refreshOrderRows() {
   if (target.length > 40) target = target.slice(0, 37) + "\u2026"; // button only; full name shows in the row
   $("order-confirm").textContent = orderMode === "merge"
     ? `Append ${rows.length - 1} file${rows.length - 1 === 1 ? "" : "s"} into ${target}`
-    : `Create master (${rows.length} file${rows.length === 1 ? "" : "s"})`;
+    : `Combine ${rows.length} file${rows.length === 1 ? "" : "s"} \u2192 new PDF`;
 }
 
 $("order-cancel").addEventListener("click", closeOrderModal);

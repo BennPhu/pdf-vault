@@ -3,6 +3,16 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.7.2] - 2026-07-10
+
+### Changed
+- Clearer action names — no behavior changes. "Merge Selected" is now
+  **➕ Append to PDF** and "Create Master PDF" is now **📤 Combine → New
+  PDF**, with explanatory tooltips; dialog titles and confirm buttons
+  match ("Combine into a new PDF", "Combine N files → new PDF"). The two
+  actions were often mistaken for duplicates: Append grows an existing
+  library file in place, Combine exports a brand-new file.
+
 ## [1.7.1] - 2026-07-10
 
 ### Fixed
