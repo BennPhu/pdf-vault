@@ -375,6 +375,7 @@ body {
 }
 
 .card {
+  position: relative;
   background: var(--bg);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
@@ -383,6 +384,24 @@ body {
   transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
   border: 2px solid transparent;
   text-align: center;
+}
+
+/* Click-order badge: shows the combine position while selecting */
+.order-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  min-width: 22px;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  box-shadow: var(--shadow);
+  pointer-events: none;
 }
 
 .card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
@@ -420,6 +439,88 @@ body {
   border-radius: 999px;
   padding: 1px 7px;
   margin-top: 6px;
+}
+
+/* ------------------------------------- combine-order modal (merge/master) */
+
+.order-list {
+  max-height: 46vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 4px;
+}
+
+.order-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: var(--bg-warm, #f6f1ea);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.order-row:active { cursor: grabbing; }
+.order-row.drag-hidden { display: none; }
+
+.order-row.order-target {
+  border-color: var(--accent);
+  background: var(--accent-wash, rgba(224, 122, 95, 0.10));
+}
+
+.order-grip { color: var(--muted); font-size: 13px; letter-spacing: -2px; }
+
+.order-pos {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.order-target .order-pos {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.order-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-pages { flex-shrink: 0; font-size: 11px; color: var(--muted); }
+
+.order-arrow { flex-shrink: 0; }
+.order-arrow:disabled { opacity: 0.3; cursor: default; }
+
+/* Floating copy of the row under the cursor while dragging */
+.order-ghost {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  opacity: 0.95;
+  will-change: transform;
+}
+
+/* Suggested drop slot between rows */
+.order-placeholder {
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: rgba(224, 122, 95, 0.08);
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 /* ------------------------------------------------------------ empty state */

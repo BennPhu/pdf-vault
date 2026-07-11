@@ -22,12 +22,12 @@ private where the web tools are not.
 
 - **Library with live search** — drop files in (with a live progress bar on big batches), find them instantly, double-click a name to rename
 - **Preview & file info** — flip through any PDF's pages; hover/click the ⓘ for size, dates, dimensions, and PDF metadata
-- **Merge / Split** — combine selected PDFs, extract page ranges, or split every page to its own file
+- **Merge / Split** — append PDFs to the back of an existing file in your click order (with a confirm-and-reorder dialog), extract page ranges, or split every page to its own file
 - **Edit pages** — rotate or delete pages, drag-and-drop them into a new order, and discard the whole editing session if you change your mind
 - **Compress** — shrink bloated or scanned PDFs in place (original kept in trash for undo)
 - **Images → PDF** — drop PNG/JPEG/WebP files and they become PDFs in your library
 - **Delete with undo/redo** — trashed files auto-purge after 30 days
-- **Master PDF** — bind your entire library into one document on demand
+- **Master PDF** — bind your selection (or the whole library) into one new document, in exactly the order you choose
 - **Activity & stats** — see exactly what the app has done and what it uses, and clear the log anytime
 
 ## Privacy
@@ -35,6 +35,9 @@ private where the web tools are not.
 Everything runs on your machine. The only network request PDF Vault ever
 makes is an HTTPS update check against GitHub Releases — and updates install
 only after SHA-256 verification. Details in [SECURITY.md](SECURITY.md).
+
+Importing always **copies** files into the vault — your original documents
+are never touched, moved, or modified, no matter what you do in the app.
 
 ## Install
 

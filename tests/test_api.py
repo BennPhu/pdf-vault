@@ -69,9 +69,19 @@ def test_render_page_out_of_range(vault):
     assert not res["ok"]
 
 
-def test_merge_requires_two(vault):
+def test_merge_appends_into_target(vault):
     api = Api()
-    res = api.merge(["only-one.pdf"])
+    api.add_paths([str(make_pdf(vault, "target.pdf", 2)),
+                   str(make_pdf(vault, "extra.pdf", 3))])
+    res = api.merge("target.pdf", ["extra.pdf"])
+    assert res["ok"] and res["entry"]["pages"] == 5
+    assert "target.pdf" in res["message"]
+
+
+def test_merge_requires_sources(vault):
+    api = Api()
+    api.add_paths([str(make_pdf(vault, "only-one.pdf", 1))])
+    res = api.merge("only-one.pdf", [])
     assert not res["ok"]
 
 

@@ -3,6 +3,37 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.7.0] - 2026-07-10
+
+### Changed
+- **Merge is now an in-place append**: the other selected PDFs are added to
+  the back of an existing library file (default target: the first file you
+  clicked) instead of exporting to a new file. A pre-merge copy of the
+  target is kept in the trash, and the appended sources stay in the library
+  untouched. Master remains the way to combine into a new exported file.
+- **Master respects your selection**: it combines the selected files in
+  click order when a selection exists, otherwise the whole library.
+
+### Added
+- **Click order = combine order**: selected library cards show numbered
+  badges (1, 2, 3…) so you can see the combine order build as you click;
+  deselecting renumbers the rest.
+- **Confirm-order dialog** for both Merge and Master: the PDF names are
+  listed in combine order with page counts; rearrange by dragging rows
+  (smooth pointer-drag with a ghost row and dashed drop slot) or with
+  per-row ▲/▼ arrows. For Merge, the top row is clearly labeled as the
+  existing file that receives the pages — moving a different row to the
+  top makes it the target.
+- README now states explicitly that imports are copies and originals are
+  never touched.
+
+### Fixed
+- The file-info panel is now a sticky toggle: once turned on it follows
+  your selection around (auto-updating per file) instead of silently
+  turning itself off after a deselect. It hides while nothing is selected,
+  reappears on the next selection, and only the ⓘ button or its × turns
+  it off.
+
 ## [1.6.2] - 2026-07-10
 
 ### Fixed

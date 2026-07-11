@@ -15,7 +15,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.6.2"
+__version__ = "1.7.0"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -856,6 +856,33 @@ def add_any(source_path):
     return add_pdf(source_path)
 
 
+def merge_into(target_filename, source_filenames):
+    """Append library PDFs to the back of an existing library file, in place.
+
+    A pre-merge copy of the target is kept in the trash so the merge is
+    recoverable. Source files stay in the library untouched.
+    """
+    if not source_filenames:
+        raise PDFError("Select at least one PDF to append.")
+    if target_filename in source_filenames:
+        raise PDFError("The target file cannot be appended to itself.")
+    target_path = library_path(target_filename)
+    target_reader = _validate_pdf(target_path)
+    source_readers = [_validate_pdf(library_path(f)) for f in source_filenames]
+    writer = PdfWriter()
+    for page in target_reader.pages:
+        writer.add_page(page)
+    for reader in source_readers:
+        for page in reader.pages:
+            writer.add_page(page)
+    trash_dir().mkdir(parents=True, exist_ok=True)
+    shutil.copy2(target_path, _unique_dest(trash_dir(), target_filename))
+    _atomic_pdf_replace(target_path, writer)
+    entry = _refresh_entry(target_filename)
+    log_event("merge", f"{len(source_filenames)} PDFs appended into {target_filename}")
+    return entry
+
+
 def merge_pdfs(paths, output_path):
     """Merge the given PDFs (in order) into output_path."""
     if len(paths) < 2:
@@ -890,20 +917,22 @@ def extract_pages(source_path, start, end, output_path):
     return output_path
 
 
-def build_master(output_path):
-    """Combine every PDF in the library (index order) into one master PDF.
+def build_master(output_path, filenames=None):
+    """Combine library PDFs (in order) into one master PDF.
 
-    Only runs when the user explicitly asks for it.
+    Uses the given filenames when provided, otherwise every PDF in the
+    library in index order. Only runs when the user explicitly asks for it.
     """
-    index = load_index()
-    if not index:
+    if filenames is None:
+        filenames = [entry["filename"] for entry in load_index()]
+    if not filenames:
         raise PDFError("Library is empty — add some PDFs first.")
     writer = PdfWriter()
     missing = []
-    for entry in index:
-        path = library_path(entry["filename"])
+    for name in filenames:
+        path = library_path(name)
         if not path.exists():
-            missing.append(entry["filename"])
+            missing.append(name)
             continue
         reader = _validate_pdf(path)
         for page in reader.pages:
@@ -914,7 +943,7 @@ def build_master(output_path):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "wb") as f:
         writer.write(f)
-    log_event("master", f"{len(index)} PDFs -> {output_path.name}")
+    log_event("master", f"{len(filenames)} PDFs -> {output_path.name}")
     return output_path
 
 

@@ -218,17 +218,15 @@ class Api:
 
     # ------------------------------------------------------------- actions
 
-    def merge(self, filenames):
-        if len(filenames) < 2:
-            return _err("Select at least two PDFs to merge.")
-        output = self._save_dialog("merged.pdf")
-        if not output:
-            return _err("cancelled")
+    def merge(self, target, sources):
+        """Append the source library PDFs to the back of the target, in place."""
         try:
-            paths = [pdf_core.library_path(f) for f in filenames]
-            pdf_core.merge_pdfs(paths, output)
-            pdf_core.set_last_output_dir(Path(output).parent)
-            return _ok(message=f"Merged {len(paths)} PDFs into {Path(output).name}")
+            entry = pdf_core.merge_into(target, sources)
+            return _ok(
+                entry=entry,
+                message=f"Appended {len(sources)} PDF{'s' if len(sources) != 1 else ''} "
+                        f"into {target} (backup in trash)",
+            )
         except PDFError as e:
             return _err(e)
         finally:
@@ -264,12 +262,12 @@ class Api:
         finally:
             pdf_core.shrink_render_cache()
 
-    def create_master(self):
+    def create_master(self, filenames=None):
         output = self._save_dialog("master.pdf")
         if not output:
             return _err("cancelled")
         try:
-            pdf_core.build_master(output)
+            pdf_core.build_master(output, filenames)
             pdf_core.set_last_output_dir(Path(output).parent)
             return _ok(message=f"Master PDF created: {Path(output).name}")
         except PDFError as e:

@@ -140,6 +140,48 @@ def test_merge_requires_two(vault):
         pdf_core.merge_pdfs([a], vault / "out.pdf")
 
 
+def test_merge_into_appends_in_order(vault):
+    pdf_core.add_pdf(make_pdf(vault, "target.pdf", 2))
+    pdf_core.add_pdf(make_pdf(vault, "b.pdf", 3))
+    pdf_core.add_pdf(make_pdf(vault, "c.pdf", 1))
+    entry = pdf_core.merge_into("target.pdf", ["c.pdf", "b.pdf"])
+    assert entry["pages"] == 6
+    assert len(PdfReader(str(pdf_core.library_path("target.pdf"))).pages) == 6
+    # sources stay in the library untouched
+    assert pdf_core.library_path("b.pdf").exists()
+    assert pdf_core.library_path("c.pdf").exists()
+    # index entry refreshed
+    index_entry = next(e for e in pdf_core.load_index() if e["filename"] == "target.pdf")
+    assert index_entry["pages"] == 6
+
+
+def test_merge_into_keeps_backup_in_trash(vault):
+    pdf_core.add_pdf(make_pdf(vault, "target.pdf", 2))
+    pdf_core.add_pdf(make_pdf(vault, "b.pdf", 3))
+    pdf_core.merge_into("target.pdf", ["b.pdf"])
+    backup = pdf_core.trash_dir() / "target.pdf"
+    assert backup.exists()
+    assert len(PdfReader(str(backup)).pages) == 2  # pre-merge copy
+
+
+def test_merge_into_rejects_self_target(vault):
+    pdf_core.add_pdf(make_pdf(vault, "a.pdf", 1))
+    with pytest.raises(PDFError, match="itself"):
+        pdf_core.merge_into("a.pdf", ["a.pdf"])
+
+
+def test_merge_into_requires_sources(vault):
+    pdf_core.add_pdf(make_pdf(vault, "a.pdf", 1))
+    with pytest.raises(PDFError, match="at least one"):
+        pdf_core.merge_into("a.pdf", [])
+
+
+def test_merge_into_missing_source(vault):
+    pdf_core.add_pdf(make_pdf(vault, "a.pdf", 1))
+    with pytest.raises(PDFError):
+        pdf_core.merge_into("a.pdf", ["ghost.pdf"])
+
+
 def test_extract_pages(vault):
     src = make_pdf(vault, "doc.pdf", 5)
     out = vault / "range.pdf"
@@ -173,6 +215,21 @@ def test_build_master(vault):
 def test_build_master_empty_library(vault):
     with pytest.raises(PDFError, match="empty"):
         pdf_core.build_master(vault / "master.pdf")
+
+
+def test_build_master_ordered_subset(vault):
+    pdf_core.add_pdf(make_pdf(vault, "a.pdf", 2))
+    pdf_core.add_pdf(make_pdf(vault, "b.pdf", 3))
+    pdf_core.add_pdf(make_pdf(vault, "c.pdf", 1))
+    out = vault / "master.pdf"
+    pdf_core.build_master(out, ["c.pdf", "a.pdf"])  # subset, custom order
+    assert len(PdfReader(str(out)).pages) == 3
+
+
+def test_build_master_missing_listed_file(vault):
+    pdf_core.add_pdf(make_pdf(vault, "a.pdf", 1))
+    with pytest.raises(PDFError, match="Missing"):
+        pdf_core.build_master(vault / "master.pdf", ["a.pdf", "ghost.pdf"])
 
 
 # ---------------------------------------------------------------- index

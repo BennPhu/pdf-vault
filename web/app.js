@@ -101,6 +101,7 @@ function renderLibrary() {
   grid.innerHTML = "";
   const shown = visibleLibrary();
   $("empty-state").hidden = library.length > 0;
+  const orderOf = new Map([...selected].map((f, i) => [f, i + 1]));
 
   if (library.length > 0 && shown.length === 0) {
     const none = document.createElement("p");
@@ -143,6 +144,13 @@ function renderLibrary() {
     badge.className = "pages-badge";
     badge.textContent = entry.pages + (entry.pages === 1 ? " page" : " pages");
     card.appendChild(badge);
+
+    if (orderOf.has(entry.filename)) {
+      const ord = document.createElement("span");
+      ord.className = "order-badge";
+      ord.textContent = String(orderOf.get(entry.filename));
+      card.appendChild(ord);
+    }
 
     card.addEventListener("click", () => toggleSelect(entry.filename));
     grid.appendChild(card);
@@ -208,7 +216,12 @@ async function showPreview(filename, page) {
   $("preview-nav").hidden = false;
   $("page-label").textContent = `${previewPage} / ${previewTotal}`;
   $("preview-info-btn").hidden = false;
-  if (changed && !$("file-info-panel").hidden) refreshFileInfoPanel();
+  if (infoPinned) {
+    const panel = $("file-info-panel");
+    const wasHidden = panel.hidden;
+    panel.hidden = false;
+    if (changed || wasHidden) refreshFileInfoPanel();
+  }
 }
 
 function clearPreview() {
@@ -222,6 +235,12 @@ function clearPreview() {
 }
 
 /* ------------------------------------------------ file info dot & panel */
+
+/* The panel is a sticky toggle: once turned on it follows the previewed
+   file around and only an explicit (i) click or its × turns it off.
+   clearPreview() hides it while nothing is selected, but the pin survives
+   so it reappears on the next selection. */
+let infoPinned = false;
 
 const FI_LABELS = {
   filename: "Name", pages: "Pages", size_bytes: "Size", added: "Added",
@@ -263,6 +282,7 @@ $("preview-info-btn").addEventListener("mouseenter", () => {
 $("preview-info-btn").addEventListener("mouseleave", () => { $("info-tooltip").hidden = true; });
 
 async function refreshFileInfoPanel() {
+  if (!previewFile) return;
   const res = await window.pywebview.api.get_file_info(previewFile);
   if (!res.ok) { toast(res.error, "error"); return; }
   const rows = $("file-info-rows");
@@ -284,12 +304,16 @@ async function refreshFileInfoPanel() {
 
 $("preview-info-btn").addEventListener("click", async () => {
   const panel = $("file-info-panel");
-  if (!panel.hidden) { panel.hidden = true; return; }
+  if (infoPinned) { infoPinned = false; panel.hidden = true; return; }
   if (!previewFile) return;
+  infoPinned = true;
   panel.hidden = false;
   await refreshFileInfoPanel();
 });
-$("file-info-close").addEventListener("click", () => { $("file-info-panel").hidden = true; });
+$("file-info-close").addEventListener("click", () => {
+  infoPinned = false;
+  $("file-info-panel").hidden = true;
+});
 
 $("prev-page").addEventListener("click", () => {
   if (previewFile && previewPage > 1) showPreview(previewFile, previewPage - 1);
@@ -396,6 +420,7 @@ $("btn-select-all").addEventListener("click", () => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (!$("split-modal").hidden) closeSplitModal();
+    else if (!$("order-modal").hidden) closeOrderModal();
     else if (!$("edit-modal").hidden) closeEditModal();
     else if (searchQuery) {
       $("search").value = "";
@@ -448,21 +473,235 @@ $("btn-redo").addEventListener("click", async () => {
   refreshLibrary();
 });
 
-$("btn-merge").addEventListener("click", async () => {
+$("btn-merge").addEventListener("click", () => {
   if (selected.size < 2) { toast("Select at least two PDFs to merge", "error"); return; }
-  const res = await window.pywebview.api.merge([...selected]);
-  if (res.ok) { toast(res.message, "success"); celebrate(); }
-  else if (res.error !== "cancelled") toast(res.error, "error");
+  openOrderModal("merge", [...selected]);
 });
 
 $("btn-split").addEventListener("click", () => openSplitModal("range"));
 $("btn-individual").addEventListener("click", () => openSplitModal("individual"));
 
-$("btn-master").addEventListener("click", async () => {
-  const res = await window.pywebview.api.create_master();
-  if (res.ok) { toast(res.message, "success"); celebrate(); }
-  else if (res.error !== "cancelled") toast(res.error, "error");
+$("btn-master").addEventListener("click", () => {
+  const files = selected.size ? [...selected] : library.map((e) => e.filename);
+  if (!files.length) { toast("Library is empty — add some PDFs first", "error"); return; }
+  openOrderModal("master", files);
 });
+
+/* ----------------------------------- combine-order modal (merge & master) */
+
+let orderMode = null; // "merge" | "master"
+
+function openOrderModal(mode, filenames) {
+  orderMode = mode;
+  $("order-title").textContent =
+    mode === "merge" ? "Append into existing file" : "Confirm master order";
+  $("order-subtitle").textContent = mode === "merge"
+    ? "Files are added to the back of the target, top to bottom. " +
+      "Drag or use the arrows to rearrange."
+    : "Files combine top to bottom. Drag or use the arrows to rearrange.";
+  const list = $("order-list");
+  list.innerHTML = "";
+  for (const name of filenames) list.appendChild(makeOrderRow(name));
+  refreshOrderRows();
+  $("order-modal").hidden = false;
+}
+
+function closeOrderModal() {
+  abortRowDrag();
+  $("order-modal").hidden = true;
+  orderMode = null;
+}
+
+function makeOrderRow(filename) {
+  const entry = library.find((e) => e.filename === filename);
+  const row = document.createElement("div");
+  row.className = "order-row";
+  row.dataset.filename = filename;
+
+  const grip = document.createElement("span");
+  grip.className = "order-grip";
+  grip.textContent = "\u22ee\u22ee";
+  row.appendChild(grip);
+
+  const pos = document.createElement("span");
+  pos.className = "order-pos";
+  row.appendChild(pos);
+
+  const name = document.createElement("span");
+  name.className = "order-name";
+  name.textContent = filename;
+  name.title = filename;
+  row.appendChild(name);
+
+  const pages = document.createElement("span");
+  pages.className = "order-pages";
+  if (entry) pages.textContent = entry.pages + (entry.pages === 1 ? " page" : " pages");
+  row.appendChild(pages);
+
+  const up = document.createElement("button");
+  up.className = "btn round order-arrow";
+  up.textContent = "\u25b2";
+  up.addEventListener("click", () => {
+    const prev = row.previousElementSibling;
+    if (prev) { prev.before(row); refreshOrderRows(); }
+  });
+  const down = document.createElement("button");
+  down.className = "btn round order-arrow";
+  down.textContent = "\u25bc";
+  down.addEventListener("click", () => {
+    const next = row.nextElementSibling;
+    if (next) { next.after(row); refreshOrderRows(); }
+  });
+  row.append(up, down);
+
+  row.addEventListener("pointerdown", (e) => {
+    if (e.target.closest(".order-arrow")) return; // arrows stay clickable
+    startRowDrag(e, row);
+  });
+  return row;
+}
+
+/* Renumber rows, mark the merge target, and sync arrows + confirm label. */
+function refreshOrderRows() {
+  const rows = [...$("order-list").querySelectorAll(".order-row")];
+  rows.forEach((row, i) => {
+    const isTarget = orderMode === "merge" && i === 0;
+    row.classList.toggle("order-target", isTarget);
+    row.querySelector(".order-pos").textContent = orderMode === "merge"
+      ? (isTarget ? "EXISTING FILE \u2014 appends here" : `+${i}`)
+      : String(i + 1);
+    const [up, down] = row.querySelectorAll(".order-arrow");
+    up.disabled = i === 0;
+    down.disabled = i === rows.length - 1;
+  });
+  const target = rows[0] ? rows[0].dataset.filename : "";
+  $("order-confirm").textContent = orderMode === "merge"
+    ? `Append ${rows.length - 1} file${rows.length - 1 === 1 ? "" : "s"} into ${target}`
+    : `Create master (${rows.length} file${rows.length === 1 ? "" : "s"})`;
+}
+
+$("order-cancel").addEventListener("click", closeOrderModal);
+$("order-confirm").addEventListener("click", async () => {
+  const order = [...$("order-list").querySelectorAll(".order-row")]
+    .map((r) => r.dataset.filename);
+  const mode = orderMode;
+  closeOrderModal();
+  const res = mode === "merge"
+    ? await window.pywebview.api.merge(order[0], order.slice(1))
+    : await window.pywebview.api.create_master(order);
+  if (res.ok) {
+    toast(res.message, "success");
+    celebrate();
+    if (mode === "merge") {
+      await refreshLibrary();
+      showPreview(order[0], 1);
+    }
+  } else if (res.error !== "cancelled") toast(res.error, "error");
+});
+
+/* Row dragging: same pointer-event pattern as the page-reorder grid
+   (no HTML5 DnD, so no Python-bridge traffic), vertical geometry. */
+let rowDrag = null;
+
+function startRowDrag(e, row) {
+  if (e.button !== 0 || rowDrag) return;
+  rowDrag = {
+    row,
+    startX: e.clientX,
+    startY: e.clientY,
+    x: e.clientX,
+    y: e.clientY,
+    active: false,
+    ghost: null,
+    placeholder: null,
+    raf: 0,
+  };
+  row.setPointerCapture(e.pointerId);
+  row.addEventListener("pointermove", onRowDragMove);
+  row.addEventListener("pointerup", onRowDragEnd);
+  row.addEventListener("pointercancel", onRowDragEnd);
+}
+
+function onRowDragMove(e) {
+  if (!rowDrag) return;
+  rowDrag.x = e.clientX;
+  rowDrag.y = e.clientY;
+  if (!rowDrag.active &&
+      Math.hypot(rowDrag.x - rowDrag.startX, rowDrag.y - rowDrag.startY) >= DRAG_THRESHOLD_PX) {
+    activateRowDrag();
+  }
+}
+
+function activateRowDrag() {
+  const row = rowDrag.row;
+  const r = row.getBoundingClientRect();
+  const ghost = row.cloneNode(true);
+  ghost.classList.add("order-ghost");
+  ghost.style.width = `${r.width}px`;
+  ghost.style.left = `${r.left}px`;
+  ghost.style.top = `${r.top}px`;
+  document.body.appendChild(ghost);
+
+  const placeholder = document.createElement("div");
+  placeholder.className = "order-placeholder";
+  placeholder.style.height = `${r.height}px`;
+  row.before(placeholder);
+  row.classList.add("drag-hidden");
+
+  rowDrag.ghost = ghost;
+  rowDrag.placeholder = placeholder;
+  rowDrag.startX = rowDrag.x;
+  rowDrag.startY = rowDrag.y;
+  rowDrag.active = true;
+  rowDrag.raf = requestAnimationFrame(rowDragFrame);
+}
+
+function rowDragFrame() {
+  if (!rowDrag || !rowDrag.active) return;
+  const { y, ghost, placeholder, row } = rowDrag;
+  ghost.style.transform = `translate(0px, ${y - rowDrag.startY}px)`;
+
+  const list = $("order-list");
+  const lr = list.getBoundingClientRect();
+  if (y < lr.top + SCROLL_EDGE_PX) list.scrollTop -= SCROLL_STEP_PX;
+  else if (y > lr.bottom - SCROLL_EDGE_PX) list.scrollTop += SCROLL_STEP_PX;
+
+  for (const r of list.children) {
+    if (r === row || r === placeholder) continue;
+    const rect = r.getBoundingClientRect();
+    if (y < rect.top || y > rect.bottom) continue;
+    if (y < rect.top + rect.height / 2) {
+      if (r.previousElementSibling !== placeholder) r.before(placeholder);
+    } else if (r.nextElementSibling !== placeholder) {
+      r.after(placeholder);
+    }
+    break;
+  }
+  rowDrag.raf = requestAnimationFrame(rowDragFrame);
+}
+
+function onRowDragEnd() {
+  if (!rowDrag) return;
+  if (rowDrag.active) rowDrag.placeholder.before(rowDrag.row);
+  finishRowDrag();
+  refreshOrderRows();
+}
+
+function finishRowDrag() {
+  const { row, ghost, placeholder, raf } = rowDrag;
+  cancelAnimationFrame(raf);
+  row.classList.remove("drag-hidden");
+  row.removeEventListener("pointermove", onRowDragMove);
+  row.removeEventListener("pointerup", onRowDragEnd);
+  row.removeEventListener("pointercancel", onRowDragEnd);
+  if (ghost) ghost.remove();
+  if (placeholder) placeholder.remove();
+  rowDrag = null;
+}
+
+function abortRowDrag() {
+  if (rowDrag) onRowDragEnd();
+}
 
 $("btn-open-folder").addEventListener("click", () => window.pywebview.api.open_library_folder());
 
