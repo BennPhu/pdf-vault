@@ -1262,6 +1262,15 @@ $("log-copy").addEventListener("click", async () => {
   }
 });
 
+/* External links open in the default browser via a safelisted bridge —
+   a plain href would navigate the app's webview away from the UI. */
+document.addEventListener("click", (e) => {
+  const link = e.target.closest(".ext-link");
+  if (!link) return;
+  e.preventDefault();
+  window.pywebview.api.open_url(link.dataset.url);
+});
+
 /* ------------------------------------------------------------ info modal */
 
 $("btn-info").addEventListener("click", () => { $("info-modal").hidden = false; });

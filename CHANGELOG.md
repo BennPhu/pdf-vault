@@ -3,6 +3,19 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.7.3] - 2026-07-10
+
+### Added
+- Author credit in the About dialog and README — Benn Nguyen, linked to
+  the GitHub profile. Links open in the default browser through a new
+  safelisted `open_url` bridge (only github.com/BennPhu pages allowed),
+  so the app's UI can never be navigated away or abused to open
+  arbitrary URLs.
+
+### Changed
+- The About "How to Use" tab now matches the renamed actions
+  (Append / Split, Combine → New PDF).
+
 ## [1.7.2] - 2026-07-10
 
 ### Changed

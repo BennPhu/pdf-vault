@@ -526,6 +526,19 @@ body {
   flex-shrink: 0;
 }
 
+/* ------------------------------------------------ author & external links */
+
+.about-author { margin: -6px 0 10px; font-size: 13px; }
+
+.ext-link {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.ext-link:hover { opacity: 0.8; }
+
 /* ------------------------------------------------------------ empty state */
 
 .empty-state { text-align: center; padding: 40px 10px; }

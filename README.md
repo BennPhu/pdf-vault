@@ -39,6 +39,10 @@ only after SHA-256 verification. Details in [SECURITY.md](SECURITY.md).
 Importing always **copies** files into the vault — your original documents
 are never touched, moved, or modified, no matter what you do in the app.
 
+## Author
+
+Created by **Benn Nguyen** — [github.com/BennPhu](https://github.com/BennPhu)
+
 ## Install
 
 1. Download the latest `PDF-Vault-*-macos.zip` from [Releases](https://github.com/BennPhu/pdf-vault/releases).

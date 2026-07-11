@@ -5,6 +5,7 @@ Every public method returns a JSON-serializable dict:
 """
 
 import subprocess
+import webbrowser
 from pathlib import Path
 
 import webview
@@ -215,6 +216,17 @@ class Api:
             return _ok(info=pdf_core.get_file_info(filename))
         except PDFError as e:
             return _err(e)
+
+    def open_url(self, url):
+        """Open a safelisted external link in the default browser.
+
+        Only the project's own GitHub pages are allowed, so the bridge
+        can never be used to open arbitrary URLs.
+        """
+        if not str(url).startswith("https://github.com/BennPhu"):
+            return _err("Blocked URL")
+        webbrowser.open(url)
+        return _ok()
 
     # ------------------------------------------------------------- actions
 

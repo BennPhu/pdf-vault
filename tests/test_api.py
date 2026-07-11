@@ -85,6 +85,16 @@ def test_merge_requires_sources(vault):
     assert not res["ok"]
 
 
+def test_open_url_safelist(vault, monkeypatch):
+    api = Api()
+    opened = []
+    monkeypatch.setattr("api.webbrowser.open", opened.append)
+    assert api.open_url("https://github.com/BennPhu/pdf-vault")["ok"]
+    assert opened == ["https://github.com/BennPhu/pdf-vault"]
+    assert not api.open_url("https://evil.example.com")["ok"]
+    assert len(opened) == 1
+
+
 def test_render_page_b64_core(vault):
     src = make_pdf(vault, "r.pdf", 2)
     data, total = pdf_core.render_page_b64(src, 1, max_px=100)
