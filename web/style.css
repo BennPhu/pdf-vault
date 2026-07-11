@@ -443,6 +443,8 @@ body {
 
 /* ------------------------------------- combine-order modal (merge/master) */
 
+.modal.order-modal-box { max-width: 680px; }
+
 .order-list {
   max-height: 46vh;
   overflow-y: auto;
@@ -494,9 +496,10 @@ body {
   min-width: 0;
   font-size: 13px;
   font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-align: left;
+  line-height: 1.35;
+  white-space: normal;      /* wrap long names so they stay fully readable */
+  overflow-wrap: anywhere;
 }
 
 .order-pages { flex-shrink: 0; font-size: 11px; color: var(--muted); }

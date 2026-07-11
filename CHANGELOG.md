@@ -3,6 +3,15 @@
 All notable changes to PDF Vault are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [1.7.1] - 2026-07-10
+
+### Fixed
+- The Merge/Master confirm dialog is wider (680px) and file names now wrap
+  across lines instead of being cut off, so you can always read exactly
+  which file you're dealing with. Very long names are shortened only in
+  the confirm button label, where the full name is already visible in the
+  labeled row above.
+
 ## [1.7.0] - 2026-07-10
 
 ### Changed

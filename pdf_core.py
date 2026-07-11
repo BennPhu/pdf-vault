@@ -15,7 +15,7 @@ from pathlib import Path
 import fitz
 from pypdf import PdfReader, PdfWriter
 
-__version__ = "1.7.0"
+__version__ = "1.7.1"
 GITHUB_REPO = "BennPhu/pdf-vault"
 
 BASE_DIR = Path(__file__).resolve().parent

@@ -574,7 +574,8 @@ function refreshOrderRows() {
     up.disabled = i === 0;
     down.disabled = i === rows.length - 1;
   });
-  const target = rows[0] ? rows[0].dataset.filename : "";
+  let target = rows[0] ? rows[0].dataset.filename : "";
+  if (target.length > 40) target = target.slice(0, 37) + "\u2026"; // button only; full name shows in the row
   $("order-confirm").textContent = orderMode === "merge"
     ? `Append ${rows.length - 1} file${rows.length - 1 === 1 ? "" : "s"} into ${target}`
     : `Create master (${rows.length} file${rows.length === 1 ? "" : "s"})`;
